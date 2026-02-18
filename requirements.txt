@@ -1,0 +1,21 @@
+pyyaml
+numpy
+torch
+wandb
+gym
+matplotlib
+pandas
+pyzmq
+lgpio
+gpiozero
+smbus2
+bme280
+transforms3d
+
+
+# ROS 2 Python packages are typically installed via apt/rosdep, not pip:
+# rclpy
+# tf2_ros
+# tf2_msgs
+# geometry_msgs
+# std_msgs
