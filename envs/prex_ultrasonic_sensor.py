@@ -11,43 +11,43 @@ import time
 
 from tf2_ros import TransformListener, Buffer
 from tf2_msgs.msg import TFMessage
-from tf_transformations import euler_from_quaternion
+# from tf_transformations import euler_from_quaternion
 import math
 
 
-class YawFromTFNode(Node):
-    def __init__(self, verbose=False):
-        super().__init__("yaw_from_tf_node")
-        self.verbose = verbose
-        # Create a buffer and listener to handle transforms
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+# class YawFromTFNode(Node):
+#     def __init__(self, verbose=False):
+#         super().__init__("yaw_from_tf_node")
+#         self.verbose = verbose
+#         # Create a buffer and listener to handle transforms
+#         self.tf_buffer = Buffer()
+#         self.tf_listener = TransformListener(self.tf_buffer, self)
 
-        # Subscribe to /tf topic to receive transformation messages
-        self.subscription = self.create_subscription(
-            TFMessage, "/tf", self.tf_callback, 10
-        )
-        self.yaw = 0.0
+#         # Subscribe to /tf topic to receive transformation messages
+#         self.subscription = self.create_subscription(
+#             TFMessage, "/tf", self.tf_callback, 10
+#         )
+#         self.yaw = 0.0
 
-    def tf_callback(self, msg):
-        # Iterate through all transforms received in the TFMessage
-        for transform in msg.transforms:
-            # Check if this transform is the one we're looking for (child_frame_id: 'LHR-2D695193')
-            if transform.child_frame_id == "LHR-2D695193":
-                # Extract quaternion
-                quat = transform.transform.rotation
-                q = [quat.x, quat.y, quat.z, quat.w]
+#     def tf_callback(self, msg):
+#         # Iterate through all transforms received in the TFMessage
+#         for transform in msg.transforms:
+#             # Check if this transform is the one we're looking for (child_frame_id: 'LHR-2D695193')
+#             if transform.child_frame_id == "LHR-2D695193":
+#                 # Extract quaternion
+#                 quat = transform.transform.rotation
+#                 q = [quat.x, quat.y, quat.z, quat.w]
 
-                # Convert quaternion to Euler angles (roll, pitch, yaw)
-                roll, pitch, yaw = euler_from_quaternion(q)
-                self.yaw = yaw  # math.degrees(yaw)
+#                 # Convert quaternion to Euler angles (roll, pitch, yaw)
+#                 roll, pitch, yaw = euler_from_quaternion(q)
+#                 self.yaw = yaw  # math.degrees(yaw)
 
-                if self.verbose:
-                    # Log yaw in radians and degrees
-                    self.get_logger().info(f"Yaw from transform: {yaw} radians")
-                    self.get_logger().info(
-                        f"Yaw in degrees: {math.degrees(yaw)} degrees"
-                    )
+#                 if self.verbose:
+#                     # Log yaw in radians and degrees
+#                     self.get_logger().info(f"Yaw from transform: {yaw} radians")
+#                     self.get_logger().info(
+#                         f"Yaw in degrees: {math.degrees(yaw)} degrees"
+#                     )
 
 
 class MyNode(Node):
@@ -227,7 +227,7 @@ class PrexWorld:
         self.max_linear_speed = max_linear_speed
         self.max_angular_speed = max_angular_speed
         #TODO define the state space
-        self.state_space = 
+        self.state_space = [7]        
         self.state = np.zeros(self.state_space[0])
         self.out_of_range = out_of_range
         self.too_close = too_close
@@ -351,30 +351,30 @@ class PrexWorld:
         # self.node_ros2.state = [d1,d2,d3,d4,vx,vy,vz,wx,wy,wz,yaw]
         state = np.round(self.node_ros2.state[:], 2)
         #TODO define the state and all the following variables as you think is best for the task
-        self.state =
-        self.dist =
-        self.position =
-        self.linear_speed =
-        self.angular_speed =
+        self.state = state[[0,1,2,3,4,9,10]]
+        self.linear_speed = self.state[4]
+        self.angular_speed = self.state[5]
+        self.dist = np.linalg.norm(self.state[0:4], self.goal)
+        self.position = np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
 
         return self.state
 
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        reward = 
+        reward = 0
 
-        if self.step_counter < :
-            if <= self.radius_target:
+        if self.step_counter < self.max_random_steps:
+            if self.dist <= self.radius_target:
                 done = True
                 self.info["terminate"] = "it reached the goal"
                 #TODO consider wether or not to reward the robot if it completed the task
-                reward +=
+                reward += 1000
         else:
             done = True
             self.info["terminate"] = "it reached max episode length"
             #TODO consider wether or not to penalize the robot if it did not complete the task
-            reward =
+            reward = -10
         return (
             reward,
             done,
