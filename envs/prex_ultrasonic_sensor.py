@@ -354,8 +354,8 @@ class PrexWorld:
         self.state = state[[0,1,2,3,4,9,10]]
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
-        self.dist = np.linalg.norm(self.state[0:4], self.goal)
-        self.position = np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
+        self.dist = np.linalg.norm(self.state[0:4]**2 - self.goal **2)
+        self.position = self.state[:4]#np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
 
         return self.state
 

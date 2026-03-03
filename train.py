@@ -43,7 +43,7 @@ file_config_path = op.join(__file__[: -len("train.py")], "config.ini")
 args = parse_arguments_from_ini(file_config_path)
 last_mod_time = os.path.getmtime(file_config_path)
 
-device = "cuda"
+device = "cpu"#"cuda"
 env = PrexWorld(
     max_episode_length=args["max_steps"],
     max_linear_speed=args["max_linear_speed"],
