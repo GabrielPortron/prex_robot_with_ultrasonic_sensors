@@ -355,14 +355,15 @@ class PrexWorld:
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
         self.dist = np.linalg.norm(self.state[0:4]**2 - self.goal**2)
-        self.position = np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
+        self.position = self.state[:4] #np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
+        self.theta = self.state[6]/math.pi
 
         return self.state
 
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        reward = -(self.dist + self.linear_speed)**2
+        reward = -(self.dist + 0.01 * (self.linear_speed + self.angular_speed))
 
         if self.step_counter < self.max_random_steps:
             if self.dist <= self.radius_target:
@@ -374,7 +375,7 @@ class PrexWorld:
             done = True
             self.info["terminate"] = "it reached max episode length"
             #TODO consider wether or not to penalize the robot if it did not complete the task
-            reward = -10
+            reward = -100
         return (
             reward,
             done,
@@ -404,7 +405,7 @@ class PrexWorld:
 
         self.action = None
         reward, done = self._compute_reward(self.state, np.array([0.0, 0.0]))
-        self.theta = 0.0
+        self.theta = self.state[6]/math.pi
         done = False
 
         self.info.clear()
