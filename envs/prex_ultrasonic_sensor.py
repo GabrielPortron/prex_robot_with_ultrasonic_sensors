@@ -354,22 +354,22 @@ class PrexWorld:
         self.state = state[[0,1,2,3,4,9,10]]
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
-        self.dist = np.linalg.norm(self.state[0:4]**2 - self.goal **2)
-        self.position = self.state[:4]#np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
+        self.dist = np.linalg.norm(self.state[0:4]**2 - self.goal**2)
+        self.position = np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
 
         return self.state
 
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        reward = 0
+        reward = -(self.dist + self.linear_speed)**2
 
         if self.step_counter < self.max_random_steps:
             if self.dist <= self.radius_target:
                 done = True
                 self.info["terminate"] = "it reached the goal"
                 #TODO consider wether or not to reward the robot if it completed the task
-                reward += 1000
+                reward += 100
         else:
             done = True
             self.info["terminate"] = "it reached max episode length"
