@@ -366,7 +366,7 @@ class PrexWorld:
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        reward = -(self.dist + 0.5*np.linalg.norm(self.last_action - action))
+        reward = 1 / (self.dist + 0.01) - np.linalg.norm(self.last_action - action)
 
         if self.step_counter < self.max_random_steps:
             if self.dist <= self.radius_target:
