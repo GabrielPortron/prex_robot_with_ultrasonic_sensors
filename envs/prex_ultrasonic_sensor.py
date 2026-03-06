@@ -227,8 +227,8 @@ class PrexWorld:
         self.max_linear_speed = max_linear_speed
         self.max_angular_speed = max_angular_speed
         #TODO define the state space
-        self.state_space = [7]        
-        self.state = np.zeros(self.state_space[0])
+        self.state_space = [7+2]        
+        # self.state = np.zeros(self.state_space[0])
         self.out_of_range = out_of_range
         self.too_close = too_close
         self.state = np.zeros((self.state_space[0]))
@@ -274,6 +274,7 @@ class PrexWorld:
         self.previous_state = np.array([0.3, 0.3, 0.3, 0.3])
         self.rotate = False
         self.moves = np.array([False, False, False, False])
+        self.last_action = np.zeros(2)
 
     def _action_to_text(self, action):
         if action.shape == (1, 2):
@@ -287,7 +288,7 @@ class PrexWorld:
         self.step_counter += 1
 
         # read current robot state
-        self.read_robot_state()
+        self.read_robot_state(action)
 
         # check if it is a good action
         self.controller(action.copy(), self.position)[0]
@@ -321,6 +322,7 @@ class PrexWorld:
         self.action = action
         reward, done = self._compute_reward(self.state, self.action)
         self.timestep += 1
+        self.last_action = self.action
 
         return self.state, reward, self.info, done
 
@@ -351,11 +353,12 @@ class PrexWorld:
         # self.node_ros2.state = [d1,d2,d3,d4,vx,vy,vz,wx,wy,wz,yaw]
         state = np.round(self.node_ros2.state[:], 2)
         #TODO define the state and all the following variables as you think is best for the task
-        self.state = state[[0,1,2,3,4,9,10]]
+        self.state[:-2] = state[[0,1,2,3,4,9,10]]
+        self.state[-2:] = action
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
-        self.dist = np.linalg.norm(self.state[0:4]**2 - self.goal**2)
-        self.position = self.state[:4] #np.array([self.dist*math.cos(self.state[6]), self.dist*math.sin(self.state[6])])
+        self.position = self.state[:4]
+        self.dist = np.linalg.norm(self.position**2 - self.goal**2)
         self.theta = self.state[6]/math.pi
 
         return self.state
@@ -363,7 +366,7 @@ class PrexWorld:
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        reward = - (self.dist + 4 * np.linalg.norm(action)**2)
+        reward = -(self.dist + 0.5*np.linalg.norm(self.last_action - action))
 
         if self.step_counter < self.max_random_steps:
             if self.dist <= self.radius_target:
@@ -392,18 +395,19 @@ class PrexWorld:
         self.random_step = 0
         self.step_counter = 0
         self.dist = 0
-        self.read_robot_state()
+        self.read_robot_state(self.action)
         self.last_position = self.position.copy()
 
         if self.type_ros2_msg == "String":
             self.node_ros2.send_message("reset")
-            self.read_robot_state()
+            self.read_robot_state(self.action)
 
             while sum(self.last_position == self.position) == 4:
                 self.node_ros2.send_message("reset")
-                self.read_robot_state()
+                self.read_robot_state(self.action)
 
         self.action = None
+        self.last_action = np.zeros(2)
         reward, done = self._compute_reward(self.state, np.array([0.0, 0.0]))
         self.theta = self.state[6]/math.pi
         done = False
@@ -512,4 +516,4 @@ class PrexWorld:
             self.random_step += 1
         self.step_counter -= self.max_random_steps
         print("...done")
-        self.read_robot_state()
+        self.read_robot_state(self.action)
