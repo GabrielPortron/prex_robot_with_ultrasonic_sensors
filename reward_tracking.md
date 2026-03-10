@@ -117,6 +117,8 @@ malus_reward = 10
 
 ## Sixth Rewards - Adding the action in the state
 
+This part led to a lot of problems. Indeed, adding the action in the state made that from a certain amount of time, the robot stop to learn and goes in the corners without moving. The following graphs will show a decay in the behavior of the robot while trying new reward functions : 
+
 ```
 self.state_space = [7+2] 
 
@@ -143,9 +145,42 @@ malus_reward = 10
 ![](reward_stats/Reward_6/Comparaison_6.png)
 
 ```
-reward = -(distance_to_center + 0.5 *  norm(action - last_action))
+reward = -(distance_to_center + norm(action - last_action))
 bonus_reward = 100
 malus_reward = 10
 ```
 
-![](reward_stats/Reward_6/Sum.png)
+![](reward_stats/Reward_6/Mono.png)
+
+## Seventh Rewards - Adding the higher derivatives
+
+Here, we want to try to add the acceleration, jerk, snap, ... of the robot to try to smoothen the movement. A new term appears in the base reward function :
+
+The first one still had the action in the state
+
+```
+reward = 10 / (distance_to_center + 0.01) - delta_act - delta_hderivatives
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_7/Action.png)
+
+This one doesn't
+
+![](reward_stats/Reward_7/No_action.png)
+
+```
+reward = 10 / (distance_to_center + 0.01) - delta_hderivatives
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_7/No_delta_action.png)
+
+Here is the comparison for this section :
+
+![](reward_stats/Reward_7/Comparison.png)
+
