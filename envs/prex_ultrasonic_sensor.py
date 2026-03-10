@@ -207,6 +207,7 @@ class PrexWorld:
         repeating_action=1,
         initial_theta=0,
         size_robot=0.30,
+        n_derivatives=5,
     ):
         # env definition
         self.too_close = too_close
@@ -266,9 +267,12 @@ class PrexWorld:
 
         self.last_action = np.zeros(2)
 
-        self.derivatives = np.zeros(10)
-        self.last_derivatives = np.zeros(10)
+        self.n_derivatives = n_derivatives + 1
         self.cpt = 0
+        self.derivatives_v = np.zeros(self.n_derivatives)
+        self.last_derivatives_v = np.zeros(self.n_derivatives)
+        self.derivatives_w = np.zeros(self.n_derivatives)
+        self.last_derivatives_w = np.zeros(self.n_derivatives)
 
         # to randomize the robot's position
         self.max_random_steps = max_random_steps
@@ -280,6 +284,7 @@ class PrexWorld:
         self.previous_state = np.array([0.3, 0.3, 0.3, 0.3])
         self.rotate = False
         self.moves = np.array([False, False, False, False])
+        self.scale_factors = np.array([100,100,1000,1000,1000])
 
     def _action_to_text(self, action):
         if action.shape == (1, 2):
@@ -289,20 +294,34 @@ class PrexWorld:
             linear_vel, angular_vel = action
             return str(linear_vel) + "#" + str(angular_vel)
 
+    def update_derivatives(self, deriv, last_deriv):
+        # stock the value of the current derivative
+        buffer = deriv[:self.cpt].copy()
+
+        #prepare the calculation
+        a = deriv[:min(self.n_derivatives - 1, self.cpt)]
+        b = last_deriv[:min(self.n_derivatives - 1, self.cpt)]
+        d = self.scale_factors[:min(self.n_derivatives, self.cpt)] * self.dt
+
+        deriv[1:min(self.n_derivatives, self.cpt + 1)] = (a - b) / d
+
+        # update the old values
+        last_deriv[:self.cpt] = buffer
+
+        return(deriv, last_deriv)
+
     def step(self, action: str):
         self.step_counter += 1
         self.cpt += 1
-        buffer_derivatives = np.zeros(10)
 
         # read current robot state
         self.read_robot_state(action)
-        buffer_derivatives[:self.cpt] = self.derivatives[:self.cpt]
 
-        delta_derivatives = self.derivatives[:min(9, self.cpt)] - self.last_derivatives[:min(9, self.cpt)]
-        self.derivatives[1: min(10, self.cpt + 1)] = delta_derivatives / (1000 * self.dt)
+        self.derivatives_v, self.last_derivatives_v = self.update_derivatives(self.derivatives_v, self.last_derivatives_v)
+        self.derivatives_w, self.last_derivatives_w = self.update_derivatives(self.derivatives_w, self.last_derivatives_w)
 
         # check if it is a good action
-        self.controller(action.copy(), self.position)[0]
+        #self.controller(action.copy(), self.position)[0]
         self.action_controlled = action  # self.controller(action, self.position)[0]
 
         # send the action
@@ -334,7 +353,6 @@ class PrexWorld:
         reward, done = self._compute_reward(self.state, self.action)
         self.timestep += 1
         self.last_action = self.action
-        self.last_derivatives[:self.cpt] = buffer_derivatives[:self.cpt]
 
         return self.state, reward, self.info, done
 
@@ -370,7 +388,8 @@ class PrexWorld:
         self.angular_speed = self.state[5]
         self.position = self.state[:4]
         self.dist = np.linalg.norm(self.position**2 - self.goal**2)
-        self.derivatives[0] = self.dist
+        self.derivatives_v[0] = self.linear_speed
+        self.derivatives_w[0] = self.angular_speed
         self.theta = self.state[6]/math.pi
 
         return self.state
@@ -379,8 +398,12 @@ class PrexWorld:
         done = False
         # TODO define the reward
         delta_action = np.linalg.norm(self.last_action - action)
-        delta_derivatives = np.linalg.norm(self.last_derivatives - self.derivatives)
-        reward = 10 / (self.dist + 0.01) - delta_derivatives
+        derivatives_v = np.linalg.norm(self.derivatives_v[1:]) * 10
+        derivatives_w = np.linalg.norm(self.derivatives_w[1:]) 
+        self.norm_derivatives_v = derivatives_v
+        self.norm_derivatives_w = derivatives_w
+        self.norm_delta_actions = delta_action
+        reward = 10 / (self.dist + 0.01) - derivatives_v - derivatives_w - delta_action
 
         if self.step_counter < self.max_episode_length:
             if self.dist <= self.radius_target:
@@ -423,9 +446,11 @@ class PrexWorld:
         self.action = None
         self.last_action = np.zeros(2)
 
-        self.derivatives = np.zeros(10)
-        self.last_derivatives = np.zeros(10)
         self.cpt = 0
+        self.derivatives_v = np.zeros(self.n_derivatives)
+        self.last_derivatives_v = np.zeros(self.n_derivatives)
+        self.derivatives_w = np.zeros(self.n_derivatives)
+        self.last_derivatives_w = np.zeros(self.n_derivatives)
 
         reward, done = self._compute_reward(self.state, np.array([0.0, 0.0]))
         self.theta = self.state[6]/math.pi
