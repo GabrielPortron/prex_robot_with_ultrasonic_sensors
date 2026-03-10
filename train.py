@@ -109,6 +109,14 @@ collect_random_timesteps = args["collect_random_steps"]
 
 obs, _, _, _ = env.reset()
 
+dict_derivatives ={"speed":0,"acc":0,"jerk":0,"snap":0,"crackle":0,"pop":0}
+
+def update_dict(dict,derivatives):
+    i=0
+    for k,v in dict.items():
+        dict[k] = derivatives[i]
+        i+=1
+    return dict_derivatives
 
 def update(dt):
     global obs
@@ -164,6 +172,7 @@ def update(dt):
         agent.save(path, folder_name, tot_episodes)
         once = False
 
+
     wandb.log(
         {
             "v_linear_action": v_linear,
@@ -175,8 +184,16 @@ def update(dt):
             "runn_avg_reward": running_avg_reward,
             "alpha": agent.alpha,
             "theta": env.theta,
+            "derivatives_linear":update_dict(dict_derivatives,env.derivatives_v.tolist()),
+            "derivatives_angular":update_dict(dict_derivatives,env.derivatives_w.tolist()),
+            "norm_derivatives_linear_speed": env.norm_derivatives_v,
+            "norm_derivatives_angular_speed": env.norm_derivatives_w,
+            "norm_delta_actions" : env.norm_delta_actions
         }
     )
+
+    # if env.step_counter % 10 == 0:
+    #     wandb.log(    {"custom_data_table": wandb.Table(data=[env.derivatives.tolist()], columns=["d1","d2","d3","d4","d5","d6","d7","d8","d9","d10"])})
 
     if done is True:
         running_avg_steps = (running_avg_steps * (tot_episodes) + env.step_counter) / (
