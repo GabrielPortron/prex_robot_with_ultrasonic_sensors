@@ -158,7 +158,7 @@ def update(dt):
             }
         )
 
-    obs = next_obs
+    obs = next_obs.copy()
 
     if tot_episodes > 0 and tot_episodes % save_on_episodes == 0 and once:
         agent.save(path, folder_name, tot_episodes)

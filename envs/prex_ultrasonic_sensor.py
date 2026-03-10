@@ -264,6 +264,12 @@ class PrexWorld:
         self.dist = 0
         self.timestep = 0
 
+        self.last_action = np.zeros(2)
+
+        self.derivatives = np.zeros(10)
+        self.last_derivatives = np.zeros(10)
+        self.cpt = 0
+
         # to randomize the robot's position
         self.max_random_steps = max_random_steps
         self.random_step = 0
@@ -274,7 +280,6 @@ class PrexWorld:
         self.previous_state = np.array([0.3, 0.3, 0.3, 0.3])
         self.rotate = False
         self.moves = np.array([False, False, False, False])
-        self.last_action = np.zeros(2)
 
     def _action_to_text(self, action):
         if action.shape == (1, 2):
@@ -286,9 +291,17 @@ class PrexWorld:
 
     def step(self, action: str):
         self.step_counter += 1
+        self.cpt += 1
+        buffer_derivatives = np.zeros(10)
 
         # read current robot state
         self.read_robot_state(action)
+        buffer_derivatives[:self.cpt] = self.derivatives[:self.cpt]
+
+        delta_derivatives = self.derivatives[:self.cpt] - self.last_derivatives[:self.cpt]
+        # for i in range(1, min(10, self.cpt + 1)):
+        #     self.derivatives[i] = delta_derivatives[i - 1] / (100 * self.dt)
+        self.derivatives[1: min(10, self.cpt + 1)] = delta_derivatives / (1000 * self.dt)
 
         # check if it is a good action
         self.controller(action.copy(), self.position)[0]
@@ -323,6 +336,7 @@ class PrexWorld:
         reward, done = self._compute_reward(self.state, self.action)
         self.timestep += 1
         self.last_action = self.action
+        self.last_derivatives[:self.cpt] = buffer_derivatives[:self.cpt]
 
         return self.state, reward, self.info, done
 
@@ -359,6 +373,7 @@ class PrexWorld:
         self.angular_speed = self.state[5]
         self.position = self.state[:4]
         self.dist = np.linalg.norm(self.position**2 - self.goal**2)
+        self.derivatives[0] = self.dist
         self.theta = self.state[6]/math.pi
 
         return self.state
@@ -366,7 +381,9 @@ class PrexWorld:
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        reward = 1 / (self.dist + 0.01) - np.linalg.norm(self.last_action - action)
+        delta_action = np.linalg.norm(self.last_action - action)
+        delta_derivatives = np.linalg.norm(self.last_derivatives - self.derivatives)
+        reward = 10 / (self.dist + 0.01) - delta_action - delta_derivatives
 
         if self.step_counter < self.max_random_steps:
             if self.dist <= self.radius_target:
@@ -378,7 +395,7 @@ class PrexWorld:
             done = True
             self.info["terminate"] = "it reached max episode length"
             #TODO consider wether or not to penalize the robot if it did not complete the task
-            reward -= 10
+            reward = -1
         return (
             reward,
             done,
@@ -408,6 +425,11 @@ class PrexWorld:
 
         self.action = None
         self.last_action = np.zeros(2)
+
+        self.derivatives = np.zeros(10)
+        self.last_derivatives = np.zeros(10)
+        self.cpt = 0
+
         reward, done = self._compute_reward(self.state, np.array([0.0, 0.0]))
         self.theta = self.state[6]/math.pi
         done = False
