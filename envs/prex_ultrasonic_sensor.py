@@ -227,7 +227,7 @@ class PrexWorld:
         self.max_linear_speed = max_linear_speed
         self.max_angular_speed = max_angular_speed
         #TODO define the state space
-        self.state_space = [7+2]        
+        self.state_space = [7]        
         # self.state = np.zeros(self.state_space[0])
         self.out_of_range = out_of_range
         self.too_close = too_close
@@ -298,9 +298,7 @@ class PrexWorld:
         self.read_robot_state(action)
         buffer_derivatives[:self.cpt] = self.derivatives[:self.cpt]
 
-        delta_derivatives = self.derivatives[:self.cpt] - self.last_derivatives[:self.cpt]
-        # for i in range(1, min(10, self.cpt + 1)):
-        #     self.derivatives[i] = delta_derivatives[i - 1] / (100 * self.dt)
+        delta_derivatives = self.derivatives[:min(9, self.cpt)] - self.last_derivatives[:min(9, self.cpt)]
         self.derivatives[1: min(10, self.cpt + 1)] = delta_derivatives / (1000 * self.dt)
 
         # check if it is a good action
@@ -367,8 +365,7 @@ class PrexWorld:
         # self.node_ros2.state = [d1,d2,d3,d4,vx,vy,vz,wx,wy,wz,yaw]
         state = np.round(self.node_ros2.state[:], 2)
         #TODO define the state and all the following variables as you think is best for the task
-        self.state[:-2] = state[[0,1,2,3,4,9,10]]
-        self.state[-2:] = action
+        self.state = state[[0,1,2,3,4,9,10]]
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
         self.position = self.state[:4]
@@ -383,9 +380,9 @@ class PrexWorld:
         # TODO define the reward
         delta_action = np.linalg.norm(self.last_action - action)
         delta_derivatives = np.linalg.norm(self.last_derivatives - self.derivatives)
-        reward = 10 / (self.dist + 0.01) - delta_action - delta_derivatives
+        reward = 10 / (self.dist + 0.01) - delta_derivatives
 
-        if self.step_counter < self.max_random_steps:
+        if self.step_counter < self.max_episode_length:
             if self.dist <= self.radius_target:
                 done = True
                 self.info["terminate"] = "it reached the goal"
