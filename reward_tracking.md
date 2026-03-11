@@ -159,7 +159,7 @@ Here, we want to try to add the acceleration, jerk, snap, ... of the robot to tr
 The first one still had the action in the state
 
 ```
-reward = 10 / (distance_to_center + 0.01) - delta_act - delta_hderivatives
+reward = 10 / (distance_to_center + 0.01) - delta_act - hderivatives
 
 bonus_reward = 100
 malus_reward = 1
@@ -172,7 +172,7 @@ This one doesn't
 ![](reward_stats/Reward_7/No_action.png)
 
 ```
-reward = 10 / (distance_to_center + 0.01) - delta_hderivatives
+reward = 10 / (distance_to_center + 0.01) - hderivatives
 
 bonus_reward = 100
 malus_reward = 1
@@ -183,4 +183,34 @@ malus_reward = 1
 Here is the comparison for this section :
 
 ![](reward_stats/Reward_7/Comparison.png)
+
+## Eigth Rewards - More about the higher derivatives
+
+Now that we have the idea on how the higher derivatives work, we can change it to be more precise. We know tkae the linear and angular speeds as starting points to have more precise data. Also, we compute the derivatives up to the pop (5th derivative of speed) :
+
+```
+reward = 10 / (distance_to_center + 0.01) - delta_act - hderivatives_v - hderivatives_w
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_8/Difference_1.png)
+![](reward_stats/Reward_8/Difference_2.png)
+![](reward_stats/Reward_8/Difference_3.png)
+
+```
+reward = 10 / (distance_to_center + 0.01) 
+    + 1 / (delta_act +0.1)
+    + 1 / (hderivatives_v + 0.1)
+    + 1 / (hderivatives_w + 0.1)
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_8/Inverse_1.png)
+![](reward_stats/Reward_8/Inverse_2.png)
+![](reward_stats/Reward_8/Inverse_3.png)
+
 
