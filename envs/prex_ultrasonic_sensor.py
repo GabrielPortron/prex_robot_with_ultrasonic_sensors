@@ -403,7 +403,7 @@ class PrexWorld:
         self.norm_derivatives_v = derivatives_v
         self.norm_derivatives_w = derivatives_w
         self.norm_delta_actions = delta_action
-        reward = 10 / (self.dist + 0.01) - derivatives_v - derivatives_w - delta_action
+        reward = 20 / (self.dist + 0.01) + 1 / (derivatives_v + 0.5) + 1 / (derivatives_w + 0.5) + 1 / (delta_action +0.5)
 
         if self.step_counter < self.max_episode_length:
             if self.dist <= self.radius_target:
