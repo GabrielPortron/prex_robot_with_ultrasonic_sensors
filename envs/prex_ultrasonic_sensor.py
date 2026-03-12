@@ -284,7 +284,7 @@ class PrexWorld:
         self.previous_state = np.array([0.3, 0.3, 0.3, 0.3])
         self.rotate = False
         self.moves = np.array([False, False, False, False])
-        self.scale_factors = np.array([100,100,1000,1000,1000])
+        self.scale_factors = np.array([100,100,100,1000,1000])
 
     def _action_to_text(self, action):
         if action.shape == (1, 2):
@@ -321,7 +321,7 @@ class PrexWorld:
         self.derivatives_w, self.last_derivatives_w = self.update_derivatives(self.derivatives_w, self.last_derivatives_w)
 
         # check if it is a good action
-        #self.controller(action.copy(), self.position)[0]
+        # self.controller(action.copy(), self.position)[0]
         self.action_controlled = action  # self.controller(action, self.position)[0]
 
         # send the action
@@ -388,8 +388,8 @@ class PrexWorld:
         self.angular_speed = self.state[5]
         self.position = self.state[:4]
         self.dist = np.linalg.norm(self.position**2 - self.goal**2)
-        self.derivatives_v[0] = self.linear_speed
-        self.derivatives_w[0] = self.angular_speed
+        self.derivatives_v[0] -= self.linear_speed
+        self.derivatives_w[0] -= self.angular_speed
         self.theta = self.state[6]/math.pi
 
         return self.state
@@ -397,13 +397,13 @@ class PrexWorld:
     def _compute_reward(self, state: np.array, action):
         done = False
         # TODO define the reward
-        delta_action = np.linalg.norm(self.last_action - action)
-        derivatives_v = np.linalg.norm(self.derivatives_v[1:]) * 10
-        derivatives_w = np.linalg.norm(self.derivatives_w[1:]) 
-        self.norm_derivatives_v = derivatives_v
-        self.norm_derivatives_w = derivatives_w
+        delta_action = np.linalg.norm(action)
+        self.norm_derivatives_v =  np.linalg.norm(self.derivatives_v[1:]) * 10
+        self.norm_derivatives_w =  np.linalg.norm(self.derivatives_w[1:]) 
         self.norm_delta_actions = delta_action
-        reward = 20 / (self.dist + 0.01) + 1 / (derivatives_v + 0.5) + 1 / (derivatives_w + 0.5) + 1 / (delta_action +0.5)
+        reward = (4 / (self.dist + 0.01) 
+            + 0.3 * (1 / (self.norm_derivatives_v + 0.5) + 1 / (self.norm_derivatives_w + 0.5)) 
+            + 0.5 * ( 1 / (delta_action + 0.2)))
 
         if self.step_counter < self.max_episode_length:
             if self.dist <= self.radius_target:

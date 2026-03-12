@@ -109,14 +109,15 @@ collect_random_timesteps = args["collect_random_steps"]
 
 obs, _, _, _ = env.reset()
 
-dict_derivatives ={"speed":0,"acc":0,"jerk":0,"snap":0,"crackle":0,"pop":0}
+dict_derivatives_v ={"speed":0,"acc":0,"jerk":0,"snap":0,"crackle":0,"pop":0}
+dict_derivatives_w ={"speed":0,"acc":0,"jerk":0,"snap":0,"crackle":0,"pop":0}
 
-def update_dict(dict,derivatives):
+def update_dict(dict_,derivatives):
     i=0
-    for k,v in dict.items():
-        dict[k] = derivatives[i]
+    for k,v in dict_.items():
+        dict_[k] = derivatives[i]
         i+=1
-    return dict_derivatives
+    return dict_
 
 def update(dt):
     global obs
@@ -184,8 +185,8 @@ def update(dt):
             "runn_avg_reward": running_avg_reward,
             "alpha": agent.alpha,
             "theta": env.theta,
-            "derivatives_linear":update_dict(dict_derivatives,env.derivatives_v.tolist()),
-            "derivatives_angular":update_dict(dict_derivatives,env.derivatives_w.tolist()),
+            "derivatives_linear":update_dict(dict_derivatives_v,env.derivatives_v.tolist()),
+            "derivatives_angular":update_dict(dict_derivatives_w,env.derivatives_w.tolist()),
             "norm_derivatives_linear_speed": env.norm_derivatives_v,
             "norm_derivatives_angular_speed": env.norm_derivatives_w,
             "norm_delta_actions" : env.norm_delta_actions
