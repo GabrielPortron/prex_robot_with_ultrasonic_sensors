@@ -387,7 +387,7 @@ class PrexWorld:
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
         self.position = self.state[:4]
-        self.dist = np.linalg.norm(self.position**2 - self.goal**2)
+        self.dist = np.linalg.norm(self.position - self.goal)
         self.derivatives_v[0] -= self.linear_speed
         self.derivatives_w[0] -= self.angular_speed
         self.theta = self.state[6]/math.pi
@@ -401,16 +401,21 @@ class PrexWorld:
         self.norm_derivatives_v =  np.linalg.norm(self.derivatives_v[1:]) * 10
         self.norm_derivatives_w =  np.linalg.norm(self.derivatives_w[1:]) 
         self.norm_delta_actions = delta_action
-        reward = (4 / (self.dist + 0.01) 
-            + 0.3 * (1 / (self.norm_derivatives_v + 0.5) + 1 / (self.norm_derivatives_w + 0.5)) 
-            + 0.5 * ( 1 / (delta_action + 0.2)))
+        # reward = ((1 / (self.dist + 0.01) )**2
+        #     + 0.5 * (1 / (self.norm_derivatives_v + 0.5) + 1 / (self.norm_derivatives_w + 0.5)) 
+        #     + 0.5 * ( 1 / (delta_action + 0.2)))
+
+        
+        reward = (2 * math.exp(-(2*self.dist - 3.5))
+                  + 0.5 * min(20, (1 / (self.norm_derivatives_v + 0.5) + 1 / (self.norm_derivatives_w + 0.5)))
+                  + 1 * ( 1 / (delta_action + 0.2)))
 
         if self.step_counter < self.max_episode_length:
             if self.dist <= self.radius_target:
                 done = True
                 self.info["terminate"] = "it reached the goal"
                 #TODO consider wether or not to reward the robot if it completed the task
-                reward += 100
+                reward += 20
         else:
             done = True
             self.info["terminate"] = "it reached max episode length"
