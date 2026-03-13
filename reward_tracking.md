@@ -186,7 +186,7 @@ Here is the comparison for this section :
 
 ## Eigth Rewards - More about the higher derivatives
 
-Now that we have the idea on how the higher derivatives work, we can change it to be more precise. We know tkae the linear and angular speeds as starting points to have more precise data. Also, we compute the derivatives up to the pop (5th derivative of speed). The first ones are without the controller :
+Now that we have the idea on how the higher derivatives work, we can change it to be more precise. We know tkae the linear and angular speeds as starting points to have more precise data. Also, we compute the derivatives up to the pop (5th derivative of speed):
 
 ```
 reward = 10 / (distance_to_center + 0.01) - delta_act - hderivatives_v - hderivatives_w
@@ -219,7 +219,57 @@ Next, I tried new factors for the term in `1 / dist` : 20 (red), 40 (green) and 
 ![](reward_stats/Reward_8/Comparison_2.png)
 ![](reward_stats/Reward_8/Comparison_3.png)
 
-Then I put the controller back :
+```
+reward = 1 / (distance_to_center + 0.01) 
+    + 0.5 * (1 / (delta_act + 0.5))
+    + 0.5 * (1 / (hderivatives_v hderivatives_w + 0.5))
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_8/1_1.png)
+![](reward_stats/Reward_8/1_2.png)
+![](reward_stats/Reward_8/1_3.png)
+
+```
+reward = 2 / (distance_to_center + 0.01) 
+    + 0.5 * (1 / (delta_act + 0.5))
+    + 0.3 * (1 / (hderivatives_v hderivatives_w + 0.5))
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_8/2_1.png)
+![](reward_stats/Reward_8/2_2.png)
+![](reward_stats/Reward_8/2_3.png)
+
+```
+reward = 4 / (distance_to_center + 0.01) 
+    + 0.5 * (1 / (delta_act + 0.5))
+    + 0.3 * (1 / (hderivatives_v hderivatives_w + 0.5))
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_8/3_1.png)
+![](reward_stats/Reward_8/3_2.png)
+![](reward_stats/Reward_8/3_3.png)
+
+```
+reward = 4 / (distance_to_center + 0.01) 
+    + 0.3 * (1 / (delta_act + 0.5))
+    + 0.5 * (1 / (hderivatives_v hderivatives_w + 0.5))
+
+bonus_reward = 100
+malus_reward = 1
+```
+
+![](reward_stats/Reward_8/4_1.png)
+![](reward_stats/Reward_8/4_2.png)
+![](reward_stats/Reward_8/4_3.png)
 
 
 
