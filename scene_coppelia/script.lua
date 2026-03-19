@@ -31,7 +31,7 @@ function resetRobotPosition()
     local randomYaw = math.random() * (maxYaw - minYaw) + minYaw
 
     -- Set the random orientation
-    sim.setObjectOrientation(robot, -1, {randomRoll, randomPitch, 0.0})
+    sim.setObjectOrientation(robot, -1, {randomRoll, randomPitch, randomYaw})
     
     -- Reset the robot's velocity and acceleration to zero
     sim.setJointTargetVelocity(motorLeft, 0.0)   -- Convert to motor speed (rad/s)
@@ -90,8 +90,15 @@ function sysCall_actuation()
         end
     end
     
+    print(detect[1] .. " " .. detect[2] .. " " .. detect[3] .. " " .. detect[4])
+    
     -- Get the velocity (linear velocity: x, y, z, angular velocity: rx, ry, rz)
     local linearVelocity, angularVelocity = sim.getObjectVelocity(robot)
+    local position = sim.getObjectPosition(robot)
+    
+    -- get yaw 
+    euler_angles = sim.getObjectOrientation(robot,-1)
+    yaw = euler_angles[3]
 
     -- Create a string from the 'detect' array
     local detectStr = "Sensor readings: "
@@ -105,8 +112,16 @@ function sysCall_actuation()
     end
     for i = 1, #angularVelocity do
         msg = msg .. "#" .. angularVelocity[i] .. " "
+        
     end
+    for i=1, #position do
+        msg = msg .. "#" .. position[i] .. " "
+    end
+    print(position)
 
+    msg = msg .. "#" .. yaw .. " "
+    --print(yaw)
+    
     if   sim.getSimulationTime() - startTime_sensors >= sleepDuration_sensors then
         -- Publish the sensor data
         simROS2.publish(publisher, { data = msg })
@@ -136,13 +151,22 @@ function actionCallback(msg)
                 local wheel_distance = 0.2 -- Adjust based on the distance between the wheels (meters)
 
                 -- Compute the left and right wheel velocities (differential drive kinematics)
-                local v_left = linear_velocity - angular_velocity * wheel_distance / (2*wheel_radius)
-                local v_right = linear_velocity + angular_velocity * wheel_distance / (2*wheel_radius)
-
+                --local v_left = linear_velocity - angular_velocity * wheel_distance / (2*wheel_radius)
+                --local v_right = linear_velocity + angular_velocity * wheel_distance / (2*wheel_radius)
+                
+                
+                --print(linear_velocity .. " " .. angular_velocity)
+                local v_left = linear_velocity - (angular_velocity*wheel_distance/2)
+                local v_right = linear_velocity + (angular_velocity*wheel_distance/2)
+                local w_left = v_left/wheel_radius
+                local w_right = v_right/wheel_radius
+                --print(v_left .. " " .. v_right)
+                --print(w_left .. " " .. w_right)
+            
                 -- Example: Control the robot based on the received action
-                sim.setJointTargetVelocity(motorLeft, v_left / wheel_radius)   -- Convert to motor speed (rad/s)
-                sim.setJointTargetVelocity(motorRight, v_right / wheel_radius)   -- Convert to motor speed (rad/s)
-
+                sim.setJointTargetVelocity(motorLeft, w_left)   
+                sim.setJointTargetVelocity(motorRight, w_right) 
+                
                 -- You can call the reset function here when needed, for example:
 
             end
