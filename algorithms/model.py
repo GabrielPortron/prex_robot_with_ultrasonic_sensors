@@ -128,3 +128,61 @@ class PolicyNetwork(nn.Module):
             log_prob,
             entropy,
         )
+
+
+class ActorNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim, n_hidden_filters=256):
+        super(ActorNetwork, self).__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.n_hidden_filters = n_hidden_filters
+
+        self.fc1 = nn.Linear(
+            in_features=self.state_dim,
+            out_features=self.n_hidden_filters,
+        )
+        init_weight(self.fc1)
+        self.fc1.bias.data.zero_()
+        self.hidden2 = nn.Linear(
+            in_features=self.n_hidden_filters, out_features=self.n_hidden_filters
+        )
+        init_weight(self.hidden2)
+        self.hidden2.bias.data.zero_()
+        self.value = nn.Linear(in_features=self.n_hidden_filters, out_features=self.action_dim)
+        init_weight(self.value, initializer="xavier uniform")
+        self.value.bias.data.zero_()
+
+    def forward(self, states):
+        x = torch.flatten(states, -1)
+        x = F.elu(self.fc1(x))
+        x = F.elu(self.hidden2(x))
+        return self.value(x)
+
+
+class CriticNetwork(nn.Module):
+    def __init__(self, state_dim, action_dim=1, n_hidden_filters=256):
+        super(CriticNetwork, self).__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.n_hidden_filters = n_hidden_filters
+
+        self.fc1 = nn.Linear(
+            in_features=self.state_dim,
+            out_features=self.n_hidden_filters,
+        )
+        init_weight(self.fc1)
+        self.fc1.bias.data.zero_()
+        self.hidden2 = nn.Linear(
+            in_features=self.n_hidden_filters, out_features=self.n_hidden_filters
+        )
+        init_weight(self.hidden2)
+        self.hidden2.bias.data.zero_()
+        self.value = nn.Linear(in_features=self.n_hidden_filters, out_features=self.action_dim)
+        init_weight(self.value, initializer="xavier uniform")
+        self.value.bias.data.zero_()
+
+    def forward(self, states):
+        x = torch.flatten(states, -1)
+        x = F.elu(self.fc1(x))
+        x = F.elu(self.hidden2(x))
+        return self.value(x)
