@@ -285,6 +285,8 @@ class PrexWorld:
         self.rotate = False
         self.moves = np.array([False, False, False, False])
         self.scale_factors = np.array([100,100,100,1000,1000])
+        self.episode_counter = 0
+
 
     def _action_to_text(self, action):
         if action.shape == (1, 2):
@@ -427,6 +429,7 @@ class PrexWorld:
         )
 
     def reset(self):
+        self.episode_counter+=1
         self.previous_state[:4] = 0.3
         self.rotate = False
         self.moves[:] = False
