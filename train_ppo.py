@@ -21,7 +21,6 @@ from envs.prex_ultrasonic_sensor import PrexWorld
 
 rclpy.init()
 
-
 # start a new wandb run to track this script
 wandb.init(
     # set the wandb project where this run will be logged

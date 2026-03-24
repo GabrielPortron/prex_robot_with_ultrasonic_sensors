@@ -207,7 +207,6 @@ class PrexWorld:
         repeating_action=1,
         initial_theta=0,
         size_robot=0.30,
-        n_derivatives=5,
     ):
         # env definition
         self.too_close = too_close
@@ -228,15 +227,15 @@ class PrexWorld:
         self.max_linear_speed = max_linear_speed
         self.max_angular_speed = max_angular_speed
         #TODO define the state space
-        self.state_space = [7]        
-        # self.state = np.zeros(self.state_space[0])
+        self.state_space = [4+6+3] # 4 ultrasonic + linear.x +angular.z + yaw + distance to the goal + x_world + y_world + 3 for reward
+        self.state = np.zeros(self.state_space[0])
         self.out_of_range = out_of_range
         self.too_close = too_close
         self.state = np.zeros((self.state_space[0]))
         l1, l2 = perimeter
         self.perimeter = perimeter
         self.size_robot = size_robot
-        self.goal = np.array([l1 / 2, l1 / 2, l2 / 2, l2 / 2])
+        self.goal = np.zeros(2) # for the x and y position of the robot world frame
         self.max_distance = max(2 * l2, 2 * l1)
         self.info = {}
         self.action = None
@@ -265,15 +264,6 @@ class PrexWorld:
         self.dist = 0
         self.timestep = 0
 
-        self.last_action = np.zeros(2)
-
-        self.n_derivatives = n_derivatives + 1
-        self.cpt = 0
-        self.derivatives_v = np.zeros(self.n_derivatives)
-        self.last_derivatives_v = np.zeros(self.n_derivatives)
-        self.derivatives_w = np.zeros(self.n_derivatives)
-        self.last_derivatives_w = np.zeros(self.n_derivatives)
-
         # to randomize the robot's position
         self.max_random_steps = max_random_steps
         self.random_step = 0
@@ -284,9 +274,11 @@ class PrexWorld:
         self.previous_state = np.array([0.3, 0.3, 0.3, 0.3])
         self.rotate = False
         self.moves = np.array([False, False, False, False])
-        self.scale_factors = np.array([100,100,100,1000,1000])
+        self.last_action=np.zeros(2)
+        self.last_theta = 0.0
         self.episode_counter = 0
 
+        self.delta_beta = math.atan2(self.radius_target / 2, math.sqrt(2))
 
     def _action_to_text(self, action):
         if action.shape == (1, 2):
@@ -296,34 +288,14 @@ class PrexWorld:
             linear_vel, angular_vel = action
             return str(linear_vel) + "#" + str(angular_vel)
 
-    def update_derivatives(self, deriv, last_deriv):
-        # stock the value of the current derivative
-        buffer = deriv[:self.cpt].copy()
-
-        #prepare the calculation
-        a = deriv[:min(self.n_derivatives - 1, self.cpt)]
-        b = last_deriv[:min(self.n_derivatives - 1, self.cpt)]
-        d = self.scale_factors[:min(self.n_derivatives, self.cpt)] * self.dt
-
-        deriv[1:min(self.n_derivatives, self.cpt + 1)] = (a - b) / d
-
-        # update the old values
-        last_deriv[:self.cpt] = buffer
-
-        return(deriv, last_deriv)
-
     def step(self, action: str):
         self.step_counter += 1
-        self.cpt += 1
 
         # read current robot state
-        self.read_robot_state(action)
-
-        self.derivatives_v, self.last_derivatives_v = self.update_derivatives(self.derivatives_v, self.last_derivatives_v)
-        self.derivatives_w, self.last_derivatives_w = self.update_derivatives(self.derivatives_w, self.last_derivatives_w)
+        self.read_robot_state()
 
         # check if it is a good action
-        # self.controller(action.copy(), self.position)[0]
+        #self.controller(action.copy(), self.position)[0]
         self.action_controlled = action  # self.controller(action, self.position)[0]
 
         # send the action
@@ -354,7 +326,6 @@ class PrexWorld:
         self.action = action
         reward, done = self._compute_reward(self.state, self.action)
         self.timestep += 1
-        self.last_action = self.action
 
         return self.state, reward, self.info, done
 
@@ -379,49 +350,83 @@ class PrexWorld:
             if diff > min_dist and state[2] == min_dist:
                 state[2] = diff
 
+    def find_position(self, distances, alpha):
+        d_front = distances[0]
+        d_back = distances[1]
+        d_left = distances[2]
+        d_right = distances[3]
+
+        #body frame vectors
+        front = np.array([d_front,0])
+        back = np.array([-d_back,0])
+        left = np.array([0,-d_left])
+        right = np.array([0,+d_right])
+
+        rotation_matrix = np.array([[np.cos(alpha), -np.sin(alpha)], [np.sin(alpha), np.cos(alpha)]])
+
+        # world frame vectors
+        front_world = rotation_matrix @ front
+        back_world = rotation_matrix @ back
+        left_world = rotation_matrix @ left
+        right_world = rotation_matrix @ right
+
+        
+        # x-coordinate
+        if d_left > 0.3 and d_right > 0.3:
+            x = (0 - left_world[0] + self.perimeter[0] - right_world[0]) / 2
+        elif d_left > 0.3:
+            x = 0 - left_world[0]
+        else:
+            x = self.perimeter[0] - right_world[0]
+
+        # y-coordinate
+        if d_back > 0.3 and d_front > 0.3:
+            y = (0 - back_world[1] + self.perimeter[1] - front_world[1]) / 2
+        elif d_back > 0.3:
+            y = 0 - back_world[1]
+        else:
+            y = self.perimeter[1] - front_world[1]
+
+        return np.array([x, y])
 
     def read_robot_state(self, action=None):
         rclpy.spin_once(self.node_ros2)
-        # self.node_ros2.state = [d1,d2,d3,d4,vx,vy,vz,wx,wy,wz,yaw]
-        state = np.round(self.node_ros2.state[:], 2)
-        #TODO define the state and all the following variables as you think is best for the task
-        self.state = state[[0,1,2,3,4,9,10]]
+        # self.node_ros2.state = [d1,d2,d3,d4,vx,vy,vz,wx,wy,wz,x,y,z,yaw]
+        state = self.node_ros2.state[:]
+        self.state[:10] = state[[0,1,2,3,4,9,10,11,12,13]] 
+        self.theta = state[-1] 
+        self.distances = self.state[:4]
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
-        self.position = self.state[:4]
-        self.dist = np.linalg.norm(self.position - self.goal)
-        self.derivatives_v[0] -= self.linear_speed
-        self.derivatives_w[0] -= self.angular_speed
-        self.theta = self.state[6]/math.pi
+        self.position = self.state[6:9]
+
+        pos_vec = self.position[:2]
+        self.heading_vec = np.array([np.cos(self.theta), np.sin(self.theta)])
+        costdelta = np.dot(pos_vec, self.heading_vec) / (np.linalg.norm(pos_vec) * np.linalg.norm(self.heading_vec) + 1e-8)
+        self.delta = np.arccos(np.clip(costdelta, -1.0, 1.0))
+        self.state[10:12] = self.heading_vec
+        self.state[12] = self.delta
+
+        self.dist = np.linalg.norm(self.position[:2] - self.goal)
 
         return self.state
 
     def _compute_reward(self, state: np.array, action):
         done = False
-        # TODO define the reward
-        delta_action = np.linalg.norm(action)
-        self.norm_derivatives_v =  np.linalg.norm(self.derivatives_v[1:]) * 10
-        self.norm_derivatives_w =  np.linalg.norm(self.derivatives_w[1:]) 
-        self.norm_delta_actions = delta_action
-        # reward = ((1 / (self.dist + 0.01) )**2
-        #     + 0.5 * (1 / (self.norm_derivatives_v + 0.5) + 1 / (self.norm_derivatives_w + 0.5)) 
-        #     + 0.5 * ( 1 / (delta_action + 0.2)))
 
-        
-        reward = (2 * math.exp(-(2*self.dist - 3.5))
-                  + 0.5 * min(20, (1 / (self.norm_derivatives_v + 0.5) + 1 / (self.norm_derivatives_w + 0.5)))
-                  + 1 * ( 1 / (delta_action + 0.2)))
-
-        if self.step_counter < self.max_episode_length:
-            if self.dist <= self.radius_target:
-                done = True
-                self.info["terminate"] = "it reached the goal"
-                #TODO consider wether or not to reward the robot if it completed the task
-                reward += 20
-        else:
+        reward = - self.delta - self.dist 
+            
+        if self.dist <= self.radius_target:
             done = True
-            self.info["terminate"] = "it reached max episode length"
+            self.info["terminate"] = "it reached the goal"
+            #TODO consider wether or not to reward the robot if it completed the task
+            reward = 100#min(500, distance_bonus)
+
+        if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
+            done = True
+            self.info["terminate"] = "it reached max episode length" if self.step_counter > self.max_episode_length else "it flipped over"
             #TODO consider wether or not to penalize the robot if it did not complete the task
+            # reward = max(-1000, -1000 + abs(reward))
             reward = -1
         return (
             reward,
@@ -429,7 +434,9 @@ class PrexWorld:
         )
 
     def reset(self):
-        self.episode_counter+=1
+        self.episode_counter += 1
+        self.last_action=np.zeros(2)
+        self.last_theta = 0.0
         self.previous_state[:4] = 0.3
         self.rotate = False
         self.moves[:] = False
@@ -440,28 +447,20 @@ class PrexWorld:
         self.random_step = 0
         self.step_counter = 0
         self.dist = 0
-        self.read_robot_state(self.action)
+        self.read_robot_state()
         self.last_position = self.position.copy()
 
         if self.type_ros2_msg == "String":
             self.node_ros2.send_message("reset")
-            self.read_robot_state(self.action)
+            self.read_robot_state()
 
             while sum(self.last_position == self.position) == 4:
                 self.node_ros2.send_message("reset")
-                self.read_robot_state(self.action)
+                self.read_robot_state()
 
         self.action = None
-        self.last_action = np.zeros(2)
-
-        self.cpt = 0
-        self.derivatives_v = np.zeros(self.n_derivatives)
-        self.last_derivatives_v = np.zeros(self.n_derivatives)
-        self.derivatives_w = np.zeros(self.n_derivatives)
-        self.last_derivatives_w = np.zeros(self.n_derivatives)
-
         reward, done = self._compute_reward(self.state, np.array([0.0, 0.0]))
-        self.theta = self.state[6]/math.pi
+        self.theta = 0.0
         done = False
 
         self.info.clear()
@@ -568,4 +567,49 @@ class PrexWorld:
             self.random_step += 1
         self.step_counter -= self.max_random_steps
         print("...done")
-        self.read_robot_state(self.action)
+        self.read_robot_state()
+
+    def new_reward(self, action):
+        done = False
+
+        c = complex(self.position[0], self.position[1])
+        beta = np.angle(c)
+        
+        if abs(self.theta - math.pi - beta) >= self.delta_beta:
+            reward = 1 / (1000*abs(action[0]) + 0.1) + 1 / (abs(self.theta - math.pi - beta) + 0.01)
+        else :
+            reward = 1 / (1000*abs(action[1])+ 0.1) + math.exp(-5*self.dist + 2) - 100*abs(self.theta - math.pi - beta)
+        
+        if self.dist <= self.radius_target:
+            done = True
+            self.info["terminate"] = "it reached the goal"
+            reward = 100
+
+        if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
+            done = True
+            self.info["terminate"] = "it reached max episode length" if self.step_counter > self.max_episode_length else "it flipped over"
+            reward = -5
+            
+        return reward, done
+
+    def _simple_reward(self, state: np.array, action):
+            done = False
+
+            reward =  5*np.exp(-self.dist)
+                
+            if self.dist <= self.radius_target:
+                done = True
+                self.info["terminate"] = "it reached the goal"
+                #TODO consider wether or not to reward the robot if it completed the task
+                reward = 100#min(500, distance_bonus)
+
+            if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
+                done = True
+                self.info["terminate"] = "it reached max episode length" if self.step_counter > self.max_episode_length else "it flipped over"
+                #TODO consider wether or not to penalize the robot if it did not complete the task
+                # reward = max(-1000, -1000 + abs(reward))
+                reward = -1
+            return (
+                reward,
+                done,
+            )

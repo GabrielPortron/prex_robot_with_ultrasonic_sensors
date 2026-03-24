@@ -185,11 +185,11 @@ def update(dt):
             "runn_avg_reward": running_avg_reward,
             "alpha": agent.alpha,
             "theta": env.theta,
-            "derivatives_linear":update_dict(dict_derivatives_v,env.derivatives_v.tolist()),
-            "derivatives_angular":update_dict(dict_derivatives_w,env.derivatives_w.tolist()),
-            "norm_derivatives_linear_speed": env.norm_derivatives_v,
-            "norm_derivatives_angular_speed": env.norm_derivatives_w,
-            "norm_delta_actions" : env.norm_delta_actions
+            # "derivatives_linear":update_dict(dict_derivatives_v,env.derivatives_v.tolist()),
+            # "derivatives_angular":update_dict(dict_derivatives_w,env.derivatives_w.tolist()),
+            # "norm_derivatives_linear_speed": env.norm_derivatives_v,
+            # "norm_derivatives_angular_speed": env.norm_derivatives_w,
+            # "norm_delta_actions" : env.norm_delta_actions
         }
     )
 
