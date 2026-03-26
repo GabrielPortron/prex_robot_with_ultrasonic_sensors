@@ -1,6 +1,6 @@
 import math
-import rclpy
-from rclpy.node import Node
+# import rclpy
+# from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray
 from nav_msgs.msg import Odometry
 
@@ -8,11 +8,14 @@ from geometry_msgs.msg import Twist
 import numpy as np
 import time
 
+import gymnasium as gym
+from gymnasium import spaces
+from gymnasium.spaces import Box, Tuple
 
 from tf2_ros import TransformListener, Buffer
 from tf2_msgs.msg import TFMessage
 # from tf_transformations import euler_from_quaternion
-import math
+
 
 
 # class YawFromTFNode(Node):
@@ -182,7 +185,7 @@ class NodeRealRobot(MyNode):
                 print("state not update!")
 
 
-class PrexWorld:
+class PrexWorld(gym.Env):
     def __init__(
         self,
         max_episode_length=1000,
@@ -223,15 +226,34 @@ class PrexWorld:
         self.verbose = verbose
         self.max_episode_length = max_episode_length
         self.step_counter = 0
-        self.action_space = [2]
+        
         self.max_linear_speed = max_linear_speed
         self.max_angular_speed = max_angular_speed
-        #TODO define the state space
-        self.state_space = [4+6+3] # 4 ultrasonic + linear.x +angular.z + yaw + distance to the goal + x_world + y_world + 3 for reward
-        self.state = np.zeros(self.state_space[0])
+        self.action_space = Tuple(
+                    (   Box(-self.max_linear_speed, self.max_linear_speed, dtype=np.float32),     # linear speed
+                        Box(-self.max_angular_speed, self.max_angular_speed, dtype=np.float32),   # angular speed
+                    )
+                )
+        
+        self.state_space = Tuple(
+                    (   Box(0.3, 4, dtype=np.float32),                                            # front distance
+                        Box(0.3, 4, dtype=np.float32),                                            # back distance
+                        Box(0.3, 4, dtype=np.float32),                                            # left distance
+                        Box(0.3, 4, dtype=np.float32),                                            # right distance
+                        Box(-self.max_linear_speed, self.max_linear_speed, dtype=np.float32),     # linear speed
+                        Box(-self.max_angular_speed, self.max_angular_speed, dtype=np.float32),   # angular speed
+                        Box(-math.pi, math.pi, dtype=np.float32),                                 # yaw
+                        Box(0, 1.42, dtype=np.float32),                                           # distance
+                        Box(-1, 1, dtype=np.float32),                                             # x
+                        Box(-1, 1, dtype=np.float32),                                             # y
+                        Box(-1, 1, dtype=np.float32),                                             # Heading_vec[0]
+                        Box(-1, 1, dtype=np.float32),                                             # Heading_vec[1]
+                        Box(-100, 100, dtype=np.float32),                                         # Delta
+                    )
+                )
         self.out_of_range = out_of_range
         self.too_close = too_close
-        self.state = np.zeros((self.state_space[0]))
+        self.state = np.zeros(13)
         l1, l2 = perimeter
         self.perimeter = perimeter
         self.size_robot = size_robot
@@ -324,10 +346,10 @@ class PrexWorld:
         # read the new state after the action has been performed
         self.read_robot_state(action)
         self.action = action
-        reward, done = self._compute_reward(self.state, self.action)
+        reward, terminated, truncated = self._compute_reward(self.state, self.action)
         self.timestep += 1
 
-        return self.state, reward, self.info, done
+        return self.state, reward, terminated, truncated, self.info
 
     def check_and_correct_value(self, state, min_dist=0.3):
 
@@ -394,7 +416,7 @@ class PrexWorld:
         # self.node_ros2.state = [d1,d2,d3,d4,vx,vy,vz,wx,wy,wz,x,y,z,yaw]
         state = self.node_ros2.state[:]
         self.state[:10] = state[[0,1,2,3,4,9,10,11,12,13]] 
-        self.theta = state[-1] 
+        self.theta = self.state[-1] 
         self.distances = self.state[:4]
         self.linear_speed = self.state[4]
         self.angular_speed = self.state[5]
@@ -412,26 +434,26 @@ class PrexWorld:
         return self.state
 
     def _compute_reward(self, state: np.array, action):
-        done = False
+        terminated = False
+        truncated = False
 
         reward = - self.delta - self.dist 
             
         if self.dist <= self.radius_target:
-            done = True
+            terminated = True
             self.info["terminate"] = "it reached the goal"
-            #TODO consider wether or not to reward the robot if it completed the task
-            reward = 100#min(500, distance_bonus)
+        
+        if abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
+            terminated = True
+            self.info["terminate"] =  "it flipped over"
+            reward = -1
 
         if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
-            done = True
-            self.info["terminate"] = "it reached max episode length" if self.step_counter > self.max_episode_length else "it flipped over"
-            #TODO consider wether or not to penalize the robot if it did not complete the task
-            # reward = max(-1000, -1000 + abs(reward))
+            truncated = True
+            self.info["terminate"] = "it reached max episode length"
             reward = -1
-        return (
-            reward,
-            done,
-        )
+
+        return (reward, terminated, truncated)
 
     def reset(self):
         self.episode_counter += 1
@@ -465,7 +487,7 @@ class PrexWorld:
 
         self.info.clear()
 
-        return self.state, reward, self.info, done
+        return self.state, self.info
 
     def controller(self, action, state, noDetectionDist=0.30):
         if self.verbose:
@@ -569,47 +591,8 @@ class PrexWorld:
         print("...done")
         self.read_robot_state()
 
-    def new_reward(self, action):
-        done = False
+    def render(self):
+        pass
 
-        c = complex(self.position[0], self.position[1])
-        beta = np.angle(c)
-        
-        if abs(self.theta - math.pi - beta) >= self.delta_beta:
-            reward = 1 / (1000*abs(action[0]) + 0.1) + 1 / (abs(self.theta - math.pi - beta) + 0.01)
-        else :
-            reward = 1 / (1000*abs(action[1])+ 0.1) + math.exp(-5*self.dist + 2) - 100*abs(self.theta - math.pi - beta)
-        
-        if self.dist <= self.radius_target:
-            done = True
-            self.info["terminate"] = "it reached the goal"
-            reward = 100
-
-        if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
-            done = True
-            self.info["terminate"] = "it reached max episode length" if self.step_counter > self.max_episode_length else "it flipped over"
-            reward = -5
-            
-        return reward, done
-
-    def _simple_reward(self, state: np.array, action):
-            done = False
-
-            reward =  5*np.exp(-self.dist)
-                
-            if self.dist <= self.radius_target:
-                done = True
-                self.info["terminate"] = "it reached the goal"
-                #TODO consider wether or not to reward the robot if it completed the task
-                reward = 100#min(500, distance_bonus)
-
-            if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
-                done = True
-                self.info["terminate"] = "it reached max episode length" if self.step_counter > self.max_episode_length else "it flipped over"
-                #TODO consider wether or not to penalize the robot if it did not complete the task
-                # reward = max(-1000, -1000 + abs(reward))
-                reward = -1
-            return (
-                reward,
-                done,
-            )
+    def close(self):
+        pass
