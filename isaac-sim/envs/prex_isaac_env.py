@@ -37,3 +37,6 @@ class PrexIsaacEnv:
 
         # --- ?. Physic Initialization -----------------------------------
         self.world.reset()
+
+        # --- After First Reset ! ----------------------------------------
+        self.robot.initialize()

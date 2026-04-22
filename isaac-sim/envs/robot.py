@@ -44,6 +44,10 @@ class Create3Robot:
 
         self.robot.initialize()
         self.controller = RobotController()
+    
+    def apply_action(self, command):
+
+        self.robot.apply_wheel_actions(self.controller.forward(command=command))
 
     def stop(self):
 
