@@ -1,7 +1,3 @@
-from isaacsim import SimulationApp
-
-app = SimulationApp({"headless": True})
-
 from isaacsim.core.api.objects import FixedCuboid
 
 import numpy as np
