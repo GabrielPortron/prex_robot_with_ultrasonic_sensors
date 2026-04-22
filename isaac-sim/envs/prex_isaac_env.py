@@ -4,7 +4,8 @@ app = SimulationApp({"headless": True})
 
 from isaacsim.core.api import World
 
-from envs.arena import Arena
+from arena import Arena
+from robot import Create3Robot
 
 class PrexIsaacEnv:
     def __init__(
@@ -29,6 +30,10 @@ class PrexIsaacEnv:
             height=self.heigth
         )
         self.arena.build()
+
+        # --- 3. Add Robot -----------------------------------------------
+        self.robot = Create3Robot(world=self.world)
+        self.robot.load()
 
         # --- ?. Physic Initialization -----------------------------------
         self.world.reset()
