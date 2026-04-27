@@ -55,9 +55,9 @@ class PrexIsaacEnv(gym.Env):
         )
 
         self.observation_space = Box(
-            low=np.array([0.3, 0.3, 0.3, 0.3,
+            low=np.array([-4.0, -4.0, -4.0, -4.0,
                         -self.max_linear_speed, -self.max_angular_speed,
-                        -1.0, -1.0, 0.0, -math.pi, -1.0, -1.0, -100.0]),
+                        -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
             high=np.array([4.0, 4.0, 4.0, 4.0,
                         self.max_linear_speed, self.max_angular_speed,
                         1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
@@ -109,9 +109,9 @@ class PrexIsaacEnv(gym.Env):
         # --- 2. Import Isaac API ----------------------------------------
         from isaacsim.core.api import World
 
-        from arena import Arena
-        from robot import Create3Robot
-        from sensors import UltrasonicSensors
+        from envs.arena import Arena
+        from envs.robot import Create3Robot
+        from envs.sensors import UltrasonicSensors
 
         # --- 3. Create world --------------------------------------------
         self.world = World()
@@ -160,6 +160,7 @@ class PrexIsaacEnv(gym.Env):
             self.world.step(render=False)
 
         self.read_state()
+        self.prev_dist = self.dist
 
         if self.verbose:
             print(f"[reset] spawn=({spawn_x:.2f},{spawn_y:.2f}) yaw={spawn_yaw:.2f} dist={self.dist:.2f}")
@@ -170,6 +171,7 @@ class PrexIsaacEnv(gym.Env):
 
         self.step_counter += 1
         self.action = action
+        self.prev_dist = self.dist
 
         linear_vel = float(np.clip(action[0], -self.max_linear_speed, self.max_linear_speed))
         angular_vel = float(np.clip(action[1], -self.max_angular_speed, self.max_angular_speed))
@@ -179,7 +181,7 @@ class PrexIsaacEnv(gym.Env):
             self.world.step(render=False)
         
         self.read_state()
-        reward, terminated, truncated = self.compute_reward(self.state, action)
+        reward, terminated, truncated = self.update_reward(self.state, action)
         self.timestep += 1
 
         if self.verbose:
@@ -222,31 +224,39 @@ class PrexIsaacEnv(gym.Env):
         self.angular_speed = float(angular_vel[2])
         self.dist = float(np.linalg.norm(position[:2] - self.goal))
     
-    def compute_reward(self, state, action):
+    def update_reward(self, state, action):
 
         terminated = False
-        truncated = False
+        truncated  = False
 
-        reward = - self.delta - self.dist 
-            
+        dist_improvement = self.prev_dist - self.dist
+        reward = 10.0 * dist_improvement
+
+        reward -= 0.01
+
+        min_sensor = float(np.min(state[0:4]))
+        if min_sensor < 0.35:
+            reward -= (0.35 - min_sensor) * 5.0
+
         if self.dist <= self.radius_target:
             terminated = True
-            self.info["terminate"] = "it reached the goal"
-            reward = 100.0
-        
-        if abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
-            terminated = True
-            self.info["terminate"] =  "it flipped over"
-            reward = -1.0
+            self.info["terminate"] = "reached the goal"
+            reward += 100.0
+            return reward, terminated, truncated
 
-        if self.step_counter > self.max_episode_length or abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
+        if self.position[2] < 0.05 or self.position[2] > 0.40 or self.dist > 4.0:
+            terminated = True
+            self.info["terminate"] = "flipped or out of bounds"
+            reward = -10.0
+            return reward, terminated, truncated
+
+        if self.step_counter >= self.max_episode_length:
             truncated = True
-            self.info["terminate"] = "it reached max episode length"
+            self.info["terminate"] = "max episode length"
             reward = -1.0
+            return reward, terminated, truncated
 
         return reward, terminated, truncated
-    
-    metadata = {"render_modes": []}
 
     def render(self):
         return None
