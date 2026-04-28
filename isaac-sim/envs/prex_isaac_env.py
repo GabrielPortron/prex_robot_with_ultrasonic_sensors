@@ -86,6 +86,7 @@ class PrexIsaacEnv(gym.Env):
         self.info = {}
         self.delta = 0.0
         self.heading_vec = np.zeros(2, dtype=np.float32)
+        self.curriculum_level = 0
 
         # --- Isaac Sim Objects ------------------------------------------
         self.world = None
@@ -147,8 +148,15 @@ class PrexIsaacEnv(gym.Env):
         self.info.clear()
 
         margin = 0.4
-        hx = self.perimeter[0] / 2.0 - margin
-        hy = self.perimeter[1] / 2.0 - margin
+        
+        if self.curriculum_level == 0:
+            hx = hy = 0.3
+        elif self.curriculum_level == 1:
+            hx = hy = 0.6
+        else:
+            hx = self.perimeter[0] / 2.0 - margin
+            hy = self.perimeter[1] / 2.0 - margin
+
         spawn_x = np.random.uniform(-hx, hx)
         spawn_y = np.random.uniform(-hy, hy)
         spawn_yaw = np.random.uniform(-math.pi, math.pi)
