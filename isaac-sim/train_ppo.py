@@ -63,7 +63,7 @@ PPO_CONFIG = dict(
     device               = "cuda",
 )
 
-TOTAL_TIMESTEPS    = 500_000
+TOTAL_TIMESTEPS    = 5_000_000
 EVAL_FREQ          = 10_000    # evaluate every N steps
 EVAL_EPISODES      = 5         # episodes per evaluation
 CHECKPOINT_FREQ    = 50_000    # save a checkpoint every N steps

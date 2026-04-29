@@ -123,9 +123,9 @@ for ep in range(args.episodes):
         ep_steps  += 1
 
         if done[0]:
-            term_reason = info[0].get("terminate", "")
+            term_reason = raw_env.info.get("terminate", "")
 
-            if "goal" in term_reason:
+            if "goal" in term_reason or ep_reward > 90:
                 outcome = "SUCCESS"
                 success_count += 1
             elif "flipped" in term_reason:
@@ -142,15 +142,15 @@ for ep in range(args.episodes):
     episode_lengths.append(ep_steps)
 
     print(f"{ep+1:>8} {ep_steps:>8} {ep_reward:>10.2f} "
-          f"{outcome}")
+          f"{raw_env.dist:>8.3f} {outcome}")
 
     # Take a snapshot at the end of this episode
     if args.snapshot:
         for _ in range(10):
-            env.world.step(render=True)
+            raw_env.world.step(render=True)
         rep.orchestrator.step(rt_subframes=4, delta_time=0.0)
         for _ in range(3):
-            env.world.step(render=True)
+            raw_env.world.step(render=True)
 
 
 # ── Results summary ───────────────────────────────────────────────────────────
