@@ -86,7 +86,6 @@ class PrexIsaacEnv(gym.Env):
         self.info = {}
         self.delta = 0.0
         self.heading_vec = np.zeros(2, dtype=np.float32)
-        self.curriculum_level = 0
 
         # --- Isaac Sim Objects ------------------------------------------
         self.world = None
@@ -139,6 +138,19 @@ class PrexIsaacEnv(gym.Env):
 
         print("[PrexIsaacEnv] Isaac Sim environment ready (headless).")
     
+    def spawn_robot(self):
+
+        margin = 0.3
+        
+        hx = self.perimeter[0] / 2.0 - margin
+        hy = self.perimeter[1] / 2.0 - margin
+
+        spawn_x = np.random.uniform(-hx, hx)
+        spawn_y = np.random.uniform(-hy, hy)
+        spawn_yaw = np.random.uniform(-math.pi, math.pi)
+
+        return spawn_x, spawn_y, spawn_yaw
+
     def reset(self, seed=None, options=None):
 
         super().reset(seed=seed)
@@ -147,19 +159,7 @@ class PrexIsaacEnv(gym.Env):
         self.step_counter = 0
         self.info.clear()
 
-        margin = 0.4
-        
-        if self.curriculum_level == 0:
-            hx = hy = 0.3
-        elif self.curriculum_level == 1:
-            hx = hy = 0.6
-        else:
-            hx = self.perimeter[0] / 2.0 - margin
-            hy = self.perimeter[1] / 2.0 - margin
-
-        spawn_x = np.random.uniform(-hx, hx)
-        spawn_y = np.random.uniform(-hy, hy)
-        spawn_yaw = np.random.uniform(-math.pi, math.pi)
+        spawn_x, spawn_y, spawn_yaw = self.spawn_robot()
 
         self.robot.teleport(position=np.array([spawn_x, spawn_y, 0.138]), yaw=spawn_yaw)
         self.robot.stop()
