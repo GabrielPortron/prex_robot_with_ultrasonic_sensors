@@ -35,6 +35,9 @@ file_config_path = "config.ini"
 args = parse_arguments_from_ini(file_config_path)
 last_mod_time = os.path.getmtime(file_config_path)
 
+# Uncomment below when debugging
+# args_main.no_wandb = True 
+
 if not args_main.no_wandb:
     wandb.init(
         project="prex_ultrasonic-sac",
@@ -58,7 +61,7 @@ env = PrexIsaacEnv(
     max_linear_speed=args["max_linear_speed"],
     max_angular_speed=args["max_angular_speed"],
     radius_target=args["radius_target"],
-    physics_dt=1.0 / 60.0,
+    physics_dt=1.0/60.0,
     rendering_dt=1.0,
     verbose=args["verbose"],
     clipping_limit=args["clipping_limit"],
@@ -146,10 +149,17 @@ for _ in range (TOTAL_TIMESTEPS):
     running_avg_reward = (running_avg_reward * (timesteps) + reward) / (timesteps + 1)
 
     print(f"eps = {tot_episodes}, step_count = {timesteps}, reward = {reward:.3f}, "
-        f"runn_avg_reward = {running_avg_reward}, distance = {env.dist:.3f}")
+          f"position = {env.position[:2]}, "
+        f"lin_vel = {linear_vel}, ang_vel = {angular_vel}, distance = {env.dist:.3f}")
 
     eps_return += reward
-    replay_buffer.add(obs, next_obs, action, reward, terminated)
+    replay_buffer.add(
+        obs[np.newaxis],
+        next_obs[np.newaxis],
+        action[np.newaxis],
+        np.array([reward]),
+        np.array([terminated]),
+    )
 
     if timesteps >= collect_random_timesteps:
         entropy = agent.train(timesteps, device)

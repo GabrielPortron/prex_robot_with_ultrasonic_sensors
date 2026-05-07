@@ -86,6 +86,7 @@ class PrexIsaacEnv(gym.Env):
         self.info = {}
         self.delta = 0.0
         self.heading_vec = np.zeros(2, dtype=np.float32)
+        self.last_action = np.zeros(2, dtype=np.float32)
 
         # --- Isaac Sim Objects ------------------------------------------
         self.world = None
@@ -136,7 +137,8 @@ class PrexIsaacEnv(gym.Env):
         self.world.reset()
         self.robot.initialize()
 
-        print("[PrexIsaacEnv] Isaac Sim environment ready (headless).")
+        for _ in range(30):
+            self.world.step(render=False)
     
     def spawn_robot(self):
 
@@ -161,11 +163,9 @@ class PrexIsaacEnv(gym.Env):
 
         spawn_x, spawn_y, spawn_yaw = self.spawn_robot()
 
-        self.robot.teleport(position=np.array([spawn_x, spawn_y, 0.138]), yaw=spawn_yaw)
+        self.robot.teleport(position=np.array([spawn_x, spawn_y, 0.0]), yaw=spawn_yaw)
         self.robot.stop()
-
-        for _ in range(5):
-            self.world.step(render=False)
+        self.last_action = np.zeros(2)
 
         self.read_state()
         self.prev_dist = self.dist
@@ -179,13 +179,14 @@ class PrexIsaacEnv(gym.Env):
 
         self.step_counter += 1
         self.action = action
+        self.last_action = action
         self.prev_dist = self.dist
 
         linear_vel = float(np.clip(action[0], -self.max_linear_speed, self.max_linear_speed))
         angular_vel = float(np.clip(action[1], -self.max_angular_speed, self.max_angular_speed))
-
+        
+        self.robot.apply_action(command=[linear_vel, angular_vel])
         for _ in range(max(1, self.repeating_action)):
-            self.robot.apply_action(command=[linear_vel, angular_vel])
             self.world.step(render=False)
         
         self.read_state()
@@ -226,6 +227,8 @@ class PrexIsaacEnv(gym.Env):
         self.state[10:12] = self.heading_vec
         self.state[12] = self.delta
 
+        self.state = np.round(self.state, 4)
+
         self.theta = yaw
         self.position = position
         self.linear_speed = float(linear_vel[0])
@@ -238,31 +241,28 @@ class PrexIsaacEnv(gym.Env):
         truncated  = False
 
         dist_improvement = self.prev_dist - self.dist
-        reward = 10.0 * dist_improvement
+        reward = dist_improvement * 20.0
 
-        reward -= 0.01
+        reward -= 0.05
 
         min_sensor = float(np.min(state[0:4]))
         if min_sensor < 0.35:
             reward -= (0.35 - min_sensor) * 5.0
 
-        if self.dist <= self.radius_target:
-            terminated = True
-            self.info["terminate"] = "reached the goal"
-            reward += 100.0
-            return reward, terminated, truncated
-
-        if self.position[2] < 0.05 or self.position[2] > 0.40 or self.dist > 4.0:
-            terminated = True
-            self.info["terminate"] = "flipped or out of bounds"
-            reward = -10.0
-            return reward, terminated, truncated
-
         if self.step_counter >= self.max_episode_length:
             truncated = True
             self.info["terminate"] = "max episode length"
             reward = -1.0
-            return reward, terminated, truncated
+
+        if self.position[2] > 0.40 or self.dist > 4.0:
+            terminated = True
+            self.info["terminate"] = "flipped or out of bounds"
+            reward = -10.0
+
+        if self.dist <= self.radius_target:
+            terminated = True
+            self.info["terminate"] = "reached the goal"
+            reward += 100.0
 
         return reward, terminated, truncated
 

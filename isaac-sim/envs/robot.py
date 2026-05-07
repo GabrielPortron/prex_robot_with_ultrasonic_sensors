@@ -20,7 +20,7 @@ class Create3Robot:
             self,
             world,
             prim_path="/World/create_3",
-            position=np.array([0.0, 0.0, ROBOT_HEIGHT])
+            position=np.array([0.0, 0.0, 0.])
     ):
         
         self.world = world
@@ -35,14 +35,17 @@ class Create3Robot:
             wheel_dof_names=["left_wheel_joint", "right_wheel_joint"],
             usd_path=asset_path,
             create_robot=True,
-            position=self.position
+            position=self.position,
+            orientation=np.array([0.0, 0.0, 0.0, 1.0])
         )
+
 
         self.world.scene.add(self.robot)
     
     def initialize(self):
 
         self.robot.initialize()
+        # self.robot.enable_gravity()
         self.controller = RobotController()
     
     def apply_action(self, command):
@@ -63,6 +66,11 @@ class Create3Robot:
 
         yaw = math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
 
+        vx, vy = linear_vel[0], linear_vel[1]
+        forward_speed = vx * math.cos(yaw) + vy * math.sin(yaw)
+
+        linear_vel = [forward_speed, 0.0, float(linear_vel[2])]
+
         state = {
             "position": np.array(position, dtype=np.float32),
             "orientation": np.array(orientation, dtype=np.float32),
@@ -75,24 +83,30 @@ class Create3Robot:
     
     def teleport(self, position, yaw):
 
+        # yaw = yaw*math.pi/180 if yaw in degrees, nothing else
+        
         qw = math.cos(yaw / 2.0)
         qz = math.sin(yaw / 2.0)
-        orientation = np.array([0.0, 0.0, qz, qw])
+        orientation = np.array([qw, 0.0, 0.0, qz])
 
         self.robot.set_world_pose(position=position, orientation=orientation)
         self.robot.set_linear_velocity(np.zeros(3))
         self.robot.set_angular_velocity(np.zeros(3))
-
-
+        
 class RobotController(BaseController):
 
     def __init__(self):
         super().__init__(name="robot_controller")
         self._wheel_radius = WHEEL_RADIUS
         self._wheel_base = WHEEL_DISTANCE
+        self._max_wheel_vel = MAX_LINEAR_SPEED / WHEEL_RADIUS
     
     def forward(self, command):
         v, w = command[0], command[1]
         left  = (2 * v - w * self._wheel_base) / (2 * self._wheel_radius)
         right = (2 * v + w * self._wheel_base) / (2 * self._wheel_radius)
+
+        left  = np.clip(left,  -self._max_wheel_vel, self._max_wheel_vel)
+        right = np.clip(right, -self._max_wheel_vel, self._max_wheel_vel)
+
         return ArticulationAction(joint_velocities=[left, right])
