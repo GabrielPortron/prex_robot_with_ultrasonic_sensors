@@ -62,7 +62,7 @@ class Create3Robot:
         linear_vel = self.robot.get_linear_velocity()
         angular_vel = self.robot.get_angular_velocity()
 
-        qx, qy, qz, qw = orientation
+        qw, qx, qy, qz = orientation
 
         yaw = math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
 

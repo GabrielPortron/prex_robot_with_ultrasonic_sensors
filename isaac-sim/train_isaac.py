@@ -31,7 +31,7 @@ LOGS_DIR = os.path.join("logs", RUN_NAME)
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
 
-file_config_path = "config.ini"
+file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of the path
 args = parse_arguments_from_ini(file_config_path)
 last_mod_time = os.path.getmtime(file_config_path)
 
@@ -208,4 +208,6 @@ for _ in range (TOTAL_TIMESTEPS):
         if timesteps >= collect_random_timesteps:
             agent.alpha = max(agent.alpha * args["alpha_decay_rate"], args["min_alpha"])
 
-    timesteps += 1 
+    timesteps += 1
+
+env.close()

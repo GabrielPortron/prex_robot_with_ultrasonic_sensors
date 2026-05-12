@@ -175,7 +175,7 @@ class PrexIsaacEnv(gym.Env):
 
         return self.state.copy(), self.info
     
-    def step(self, action):
+    def step(self, action, render=False):
 
         self.step_counter += 1
         self.action = action
@@ -187,7 +187,7 @@ class PrexIsaacEnv(gym.Env):
         
         self.robot.apply_action(command=[linear_vel, angular_vel])
         for _ in range(max(1, self.repeating_action)):
-            self.world.step(render=False)
+            self.world.step(render=render)
         
         self.read_state()
         reward, terminated, truncated = self.update_reward(self.state, action)
@@ -240,24 +240,23 @@ class PrexIsaacEnv(gym.Env):
         terminated = False
         truncated  = False
 
-        dist_improvement = self.prev_dist - self.dist
-        reward = dist_improvement * 20.0
+        pos_vec = self.position[:2]
+        heading_vec = np.array([np.cos(self.theta), np.sin(self.theta)])
 
-        reward -= 0.05
+        costdelta = np.dot(pos_vec, heading_vec) / (np.linalg.norm(pos_vec) * np.linalg.norm(heading_vec) + 1e-8)
+        delta = np.arccos(np.clip(costdelta, -1.0, 1.0)) 
 
-        min_sensor = float(np.min(state[0:4]))
-        if min_sensor < 0.35:
-            reward -= (0.35 - min_sensor) * 5.0
+        reward = - delta - self.dist  
 
         if self.step_counter >= self.max_episode_length:
             truncated = True
             self.info["terminate"] = "max episode length"
-            reward = -1.0
+            reward = -5.0
 
         if self.position[2] > 0.40 or self.dist > 4.0:
             terminated = True
             self.info["terminate"] = "flipped or out of bounds"
-            reward = -10.0
+            reward = -5.0
 
         if self.dist <= self.radius_target:
             terminated = True
