@@ -54,17 +54,30 @@ class PrexIsaacEnv(gym.Env):
             dtype=np.float32
         )
 
+        ### With sensors :
+
+        # self.observation_space = Box(
+        #     low=np.array([-4.0, -4.0, -4.0, -4.0,
+        #                 -self.max_linear_speed, -self.max_angular_speed,
+        #                 -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
+        #     high=np.array([4.0, 4.0, 4.0, 4.0,
+        #                 self.max_linear_speed, self.max_angular_speed,
+        #                 1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
+        #     dtype=np.float32
+        # )
+        # self.state = np.zeros(13, dtype=np.float32)
+
+        ### Without sensors :
+        
         self.observation_space = Box(
-            low=np.array([-4.0, -4.0, -4.0, -4.0,
-                        -self.max_linear_speed, -self.max_angular_speed,
+            low=np.array([-self.max_linear_speed, -self.max_angular_speed,
                         -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
-            high=np.array([4.0, 4.0, 4.0, 4.0,
-                        self.max_linear_speed, self.max_angular_speed,
+            high=np.array([self.max_linear_speed, self.max_angular_speed,
                         1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
             dtype=np.float32
-        )
+        )        
+        self.state = np.zeros(9, dtype=np.float32)
         
-        self.state = np.zeros(13, dtype=np.float32)
         self.max_bounds = np.array(
             [self.max_linear_speed, self.max_angular_speed], dtype=np.float32
         )
@@ -207,9 +220,6 @@ class PrexIsaacEnv(gym.Env):
         angular_vel = robot_state["angular_vel"]
         yaw = robot_state["yaw"]
 
-        dists = self.sensors.get_distances(position=position,
-                                           yaw=yaw)
-
         self.heading_vec = np.array([math.cos(yaw), math.sin(yaw)], dtype=np.float32)
         pos_vec = position[:2]
         norm = np.linalg.norm(pos_vec)
@@ -218,14 +228,27 @@ class PrexIsaacEnv(gym.Env):
             self.delta = float(np.arccos(np.clip(cos_delta, -1.0, 1.0)))
         else:
             self.delta = 0.0
-        
-        self.state[0:4] = dists
-        self.state[4] = linear_vel[0]
-        self.state[5] = angular_vel[2]
-        self.state[6:9] = position
-        self.state[9] = yaw
-        self.state[10:12] = self.heading_vec
-        self.state[12] = self.delta
+
+        ### With sensors :
+
+        # dists = self.sensors.get_distances(position=position,
+        #                                    yaw=yaw)
+        # self.state[0:4] = dists
+        # self.state[4] = linear_vel[0]
+        # self.state[5] = angular_vel[2]
+        # self.state[6:9] = position
+        # self.state[9] = yaw
+        # self.state[10:12] = self.heading_vec
+        # self.state[12] = self.delta
+
+        ### Without sensors :
+
+        self.state[0] = linear_vel[0]
+        self.state[1] = angular_vel[2]
+        self.state[2:5] = position
+        self.state[5] = yaw
+        self.state[6:8] = self.heading_vec
+        self.state[8] = self.delta
 
         self.state = np.round(self.state, 4)
 
