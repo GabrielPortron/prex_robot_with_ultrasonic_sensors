@@ -25,10 +25,14 @@ from envs.prex_isaac_env import PrexIsaacEnv
 
 # --- 1 - Initializations -------------------------------------------------
 parser = argparse.ArgumentParser()
-parser.add_argument("--no-wandb", action="store_true",
-                    help="Disable Weights & Biases logging")
 parser.add_argument("--cube", action="store_true",
                     help="Spawns a cube for the training")
+parser.add_argument("--ppo", action="store_true",
+                    help="Change the algorithm from SAC to PPO")
+parser.add_argument("--model",    type=str, required=True,
+                    help="Path to the saved model zip (without .zip extension)")
+parser.add_argument("--weight",    type=int, required=True,
+                    help="'Age' of the model")
 args_main = parser.parse_args()
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -42,23 +46,9 @@ file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of 
 args = parse_arguments_from_ini(file_config_path)
 last_mod_time = os.path.getmtime(file_config_path)
 
-# Uncomment below when debugging
-args_main.no_wandb = True 
-
-if not args_main.no_wandb:
-    wandb.init(
-        project="prex_ultrasonic-sac",
-        config={
-            "learning_rate": 0.001,
-            "architecture": "fc",
-            "dataset": "coppelia-prex",
-            "epochs": 0
-        }
-    )
-
-TOTAL_TIMESTEPS = 1_000_000
-
 device = "cuda"
+
+model_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/" + args_main.model +f"prex_ultrasonic_robot_policy_{args_main.weight:.3f}_weights.pth"
 
 # --- 2 - Creating environment --------------------------------------------
 print("[Playing] I - Creating environment...")
@@ -82,44 +72,8 @@ env = PrexIsaacEnv(
 
 print("[Playing] ... Environment created")
 
-# --- 3 - Creating replay buffer ------------------------------------------
-print("[Playing] II - Creating replay buffer...")
-
-batch_size = args["batch_size"]
-state_dim = env.observation_space.shape
-action_dim = env.action_space.shape
-replay_buffer = ReplayBuffer(
-    capacity=args["replay_buffer_size"],
-    batch_size=batch_size,
-    state_shape=state_dim,
-    action_shape=action_dim,
-    device=device,
-    normalize_rewards=False
-)
-
-print("[Playing] ... Replay buffer created")
-
-# --- 4 - Creating agent --------------------------------------------------
-print("[Playing] III - Creating agent...")
-
-agent = SAC(
-    env_name="prex_ultrasonic_robot",
-    state_dim=state_dim,
-    action_dim=action_dim,
-    replay_buffer=replay_buffer,
-    device=device,
-    actor_lr=args["actor_lr"],
-    critic_lr=args["critic_lr"],
-    tau=args["tau"],
-    alpha=args["alpha"],
-    gamma=args["gamma"],
-    action_bounds=(
-        (-args["max_linear_speed"], -args["max_angular_speed"]),
-        (args["max_linear_speed"], args["max_angular_speed"]),
-    ),
-)
-
-print("[Playing] ... Agent created")
+# --- 3 - Setting up Camera ----------------------------------------------
+print("[Playing] II - Setting up Camera...")
 
 from isaacsim.sensors.camera import Camera
 
@@ -134,7 +88,7 @@ camera = Camera(
 camera.initialize()
 camera.add_motion_vectors_to_frame()
 
-print("[Evaluating] ... camera set up")
+print("[Playing] ... camera set up")
 
 output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
 os.makedirs(output_path, exist_ok=True)
@@ -142,82 +96,161 @@ os.makedirs(output_path, exist_ok=True)
 images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
 os.makedirs(images_path, exist_ok=True)
 
-print("loading weights...")
-# Model with sensors :
-# agent.load_weights("/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/20260512_111705/prex_ultrasonic_robot_policy_3600_weights.pth")
 
-# Model without sensors :
-agent.load_weights("/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/20260518_155021/prex_ultrasonic_robot_policy_1500_weights.pth")
-agent.set_to_eval_mode()
+### --- PPO --- ###
+if args_main.ppo:
 
-# --- 5 - Playing -------------------------------------------------------------
-print("[Playing] Starting playing ...")
+    from stable_baselines3 import PPO
+    from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-tot_episodes = 0
-timesteps = 0
-save_on_episodes = args["save_on_episode"]
-running_avg_reward = 0
-running_avg_steps = 0
+    # --- 4 - Wrap environment ----------------------------------------------
+    print("[Playing] III - Wrapping environment...")
+    vec_env = DummyVecEnv([lambda: env])
 
-for eps in range (10):
-    obs, _ = env.reset()
+    model_path = os.path.join(args.model, "ppo_prex_final")
+    env_path = os.path.join(args.model, "vec_normalize.pkl")
 
-    tot_episodes += 1
-    eps_return = 0.0
-    done =False
-    step = 0
-    while not done:
-        action, entropy = agent.select_action(
-            torch.tensor(obs, dtype=torch.float32).unsqueeze(0).to(device)
-        )
-        action = action[0]
+    env = VecNormalize.load(
+        env_path,
+        vec_env
+    )
 
-        action = np.round(action, 4)
-        linear_vel = action[0]
-        angular_vel = action[1]
+    env.training = False
+    env.norm_reward = False
 
-        next_obs, reward, terminated, truncated, _ = env.step(action, render=True)
-        done = terminated or truncated
-        running_avg_reward = (running_avg_reward * (timesteps) + reward) / (timesteps + 1)
+    print("[Playing] ... Environment wrapped")
 
-        print(f"eps = {tot_episodes}, step_count = {timesteps}, reward = {reward:.3f}, "
-                f"position = {env.position[:2]}, "
-            f"lin_vel = {linear_vel}, ang_vel = {angular_vel}, distance = {env.dist:.3f}")
+    # --- 5 - Create agent -------------------------------------------------
+    print("[Playing] IV - Creating agent...")
+    model = PPO.load(model_path, env=env, device="cpu")
+    print("[Playing] ... Agent created")
 
-        eps_return += reward
-        obs = next_obs.copy()
+    # --- 6 - Play the model -----------------------------------------------
+    print("[Playing] Starting playing ...")
+    
+    tot_episodes = 0
+    timesteps = 0
 
-        if not args_main.no_wandb:
-            wandb.log({
-                "linear_action": linear_vel,
-                "angular_action": angular_vel,
-                "linear_speed_robot": env.linear_speed,
-                "angular_speed_robot": env.angular_speed,
-                "distance_to_center": env.dist,
-                "reward": reward,
-                "running_average_reward": running_avg_reward,
-                "theta": env.theta
-            })
+    for eps in range (10):
 
-        if done:
-            running_avg_steps = (running_avg_steps * (tot_episodes) + env.step_counter) / (tot_episodes + 1)
+        obs = env.reset()
+        
+        tot_episodes += 1
+        eps_return = 0.0
+        done =False
+        step = 0
 
-            if not args_main.no_wandb:
-                wandb.log({
-                    "ep_return": eps_return,
-                    "step_count": env.step_counter,
-                    "average_tot_steps": running_avg_steps
-                })
+        while not done:
 
-        camera.get_current_frame()
-        rgb_image = camera.get_rgb()
-        image = Image.fromarray(rgb_image)
-        save_path = f"{images_path}/ep{eps}_rgb_image_{step}.png"
-        image.save(save_path)
+            action, _ = model.predict(obs, deterministic=True)
+            action = np.round(action, 4)
+            linear_vel = action[0]
+            angular_vel = action[1]
 
-        step += 1
-        timesteps += 1
+            obs, reward, done, info = env.step(action)
 
+            print(f"eps = {tot_episodes}, step_count = {timesteps}, reward = {reward:.3f}, "
+                    f"position = {env.position[:2]}, "
+                f"lin_vel = {linear_vel}, ang_vel = {angular_vel}, distance = {env.dist:.3f}")
+
+            camera.get_current_frame()
+            rgb_image = camera.get_rgb()
+            image = Image.fromarray(rgb_image)
+            save_path = f"{images_path}/ep{eps}_rgb_image_{step}.png"
+            image.save(save_path)
+
+            step += 1
+            timesteps += 1
+
+### --- SAC --- ###
+else:
+    # --- 4 - Creating replay buffer ------------------------------------------
+    print("[Playing] III - Creating replay buffer...")
+
+    batch_size = args["batch_size"]
+    state_dim = env.observation_space.shape
+    action_dim = env.action_space.shape
+    replay_buffer = ReplayBuffer(
+        capacity=args["replay_buffer_size"],
+        batch_size=batch_size,
+        state_shape=state_dim,
+        action_shape=action_dim,
+        device=device,
+        normalize_rewards=False
+    )
+
+    print("[Playing] ... Replay buffer created")
+
+    # --- 5 - Creating agent --------------------------------------------------
+    print("[Playing] IV - Creating agent...")
+
+    agent = SAC(
+        env_name="prex_ultrasonic_robot",
+        state_dim=state_dim,
+        action_dim=action_dim,
+        replay_buffer=replay_buffer,
+        device=device,
+        actor_lr=args["actor_lr"],
+        critic_lr=args["critic_lr"],
+        tau=args["tau"],
+        alpha=args["alpha"],
+        gamma=args["gamma"],
+        action_bounds=(
+            (-args["max_linear_speed"], -args["max_angular_speed"]),
+            (args["max_linear_speed"], args["max_angular_speed"]),
+        ),
+    )
+
+    print("[Playing] ... Agent created")
+
+    agent.load_weights(model_path)
+    agent.set_to_eval_mode()
+
+    # --- 6 - Playing -------------------------------------------------------------
+    print("[Playing] Starting playing ...")
+
+    tot_episodes = 0
+    timesteps = 0
+    save_on_episodes = args["save_on_episode"]
+
+    for eps in range (10):
+
+        obs, _ = env.reset()
+
+        tot_episodes += 1
+        eps_return = 0.0
+        done =False
+        step = 0
+
+        while not done:
+            action, entropy = agent.select_action(
+                torch.tensor(obs, dtype=torch.float32).unsqueeze(0).to(device)
+            )
+            action = action[0]
+
+            action = np.round(action, 4)
+            linear_vel = action[0]
+            angular_vel = action[1]
+
+            next_obs, reward, terminated, truncated, _ = env.step(action, render=True)
+            done = terminated or truncated
+
+            print(f"eps = {tot_episodes}, step_count = {timesteps}, reward = {reward:.3f}, "
+                    f"position = {env.position[:2]}, "
+                f"lin_vel = {linear_vel}, ang_vel = {angular_vel}, distance = {env.dist:.3f}")
+
+            obs = next_obs.copy()
+
+            camera.get_current_frame()
+            rgb_image = camera.get_rgb()
+            image = Image.fromarray(rgb_image)
+            save_path = f"{images_path}/ep{eps}_rgb_image_{step}.png"
+            image.save(save_path)
+
+            step += 1
+            timesteps += 1
+
+# --- 7 - Create video -------------------------------------------------------------
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 video_name = "episode_" + timestamp + ".mp4"
 video_path = os.path.join(output_path, video_name)
