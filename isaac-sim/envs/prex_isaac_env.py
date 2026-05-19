@@ -14,6 +14,8 @@ class PrexIsaacEnv(gym.Env):
             physics_dt=1.0/60.0,
             rendering_dt=1.0,
             verbose=False,
+            cube=False,
+            sensors=False,
             clipping_limit=20.0,
             max_speed_bonus=5.0,
             repeating_action=1,
@@ -35,6 +37,8 @@ class PrexIsaacEnv(gym.Env):
         self.physics_dt = physics_dt
         self.rendering_dt = rendering_dt
         self.verbose = verbose
+        self.cube = cube
+        self.sensors=sensors
         self.clipping_limit = clipping_limit
         self.max_speed_bonus = max_speed_bonus
         self.repeating_action = repeating_action
@@ -54,30 +58,38 @@ class PrexIsaacEnv(gym.Env):
             dtype=np.float32
         )
 
-        ### With sensors :
-
-        # self.observation_space = Box(
-        #     low=np.array([-4.0, -4.0, -4.0, -4.0,
-        #                 -self.max_linear_speed, -self.max_angular_speed,
-        #                 -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
-        #     high=np.array([4.0, 4.0, 4.0, 4.0,
-        #                 self.max_linear_speed, self.max_angular_speed,
-        #                 1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
-        #     dtype=np.float32
-        # )
-        # self.state = np.zeros(13, dtype=np.float32)
-
-        ### Without sensors :
-        
-        self.observation_space = Box(
-            low=np.array([-self.max_linear_speed, -self.max_angular_speed,
+        if self.cube:
+            self.observation_space = Box(
+            low=np.array([-4.0, -self.max_linear_speed, -self.max_angular_speed,
                         -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
-            high=np.array([self.max_linear_speed, self.max_angular_speed,
+            high=np.array([4.0, self.max_linear_speed, self.max_angular_speed,
                         1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
             dtype=np.float32
-        )        
-        self.state = np.zeros(9, dtype=np.float32)
-        
+            )
+            self.state = np.zeros(10, dtype=np.float32)
+
+        elif self.sensors:
+            self.observation_space = Box(
+                low=np.array([-4.0, -4.0, -4.0, -4.0,
+                            -self.max_linear_speed, -self.max_angular_speed,
+                            -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
+                high=np.array([4.0, 4.0, 4.0, 4.0,
+                            self.max_linear_speed, self.max_angular_speed,
+                            1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
+                dtype=np.float32
+            )
+            self.state = np.zeros(13, dtype=np.float32)
+
+        else:            
+            self.observation_space = Box(
+                low=np.array([-self.max_linear_speed, -self.max_angular_speed,
+                            -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
+                high=np.array([self.max_linear_speed, self.max_angular_speed,
+                            1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
+                dtype=np.float32
+            )        
+            self.state = np.zeros(9, dtype=np.float32)
+            
         self.max_bounds = np.array(
             [self.max_linear_speed, self.max_angular_speed], dtype=np.float32
         )
@@ -106,6 +118,8 @@ class PrexIsaacEnv(gym.Env):
         self.arena = None
         self.robot = None
         self.sensors = None
+
+        assert not self.cube or not self.sensors, "You have to choose between spawning a cube or using the four sensors"
 
         self.launch()
     
@@ -139,14 +153,25 @@ class PrexIsaacEnv(gym.Env):
         )
         self.arena.build()
 
-        # --- 5. Add Robot -----------------------------------------------
+        # --- 5. Create Cube ----------------------------------------------
+        if self.cube:
+            from envs.cube import Cube
+
+            self.cube = Cube(
+            world=self.world,
+            scale=(0.3, 0.3, 0.3),
+            perimeter=self.perimeter
+            )
+            self.cube.create_cube()
+
+        # --- 6. Add Robot -----------------------------------------------
         self.robot = Create3Robot(world=self.world)
         self.robot.load()
 
-        # --- 6. Add Sensors ---------------------------------------------
+        # --- 7. Add Sensors ---------------------------------------------
         self.sensors = UltrasonicSensors(perimeter=self.perimeter)
 
-        # --- 7. Physic Initialization -----------------------------------
+        # --- 8. Physic Initialization -----------------------------------
         self.world.reset()
         self.robot.initialize()
 
@@ -183,8 +208,22 @@ class PrexIsaacEnv(gym.Env):
         self.read_state()
         self.prev_dist = self.dist
 
+        # --- Spawning the cube -------------------------------------------
+        if self.cube:
+            robot_position = self.position[:2]
+
+            cube_yaw = np.random.uniform(-math.pi, math.pi)
+            cube_orientation = np.array([math.cos(cube_yaw/2.0), 0.0, 0.0, math.sin(cube_yaw/2.0)])
+
+            cube_position = self.cube.teleport_cube(
+                orientation=cube_orientation,
+                target_radius=self.radius_target,
+                robot_position=robot_position,
+                robot_size=0.4
+            )
+
         if self.verbose:
-            print(f"[reset] spawn=({spawn_x:.2f},{spawn_y:.2f}) yaw={spawn_yaw:.2f} dist={self.dist:.2f}")
+            print(f"[reset] spawn=({spawn_x:.2f},{spawn_y:.2f}) yaw={spawn_yaw:.2f} dist={self.dist:.2f} cube_position={cube_position:.2f}")
 
         return self.state.copy(), self.info
     
@@ -229,26 +268,38 @@ class PrexIsaacEnv(gym.Env):
         else:
             self.delta = 0.0
 
-        ### With sensors :
+        if self.cube:
 
-        # dists = self.sensors.get_distances(position=position,
-        #                                    yaw=yaw)
-        # self.state[0:4] = dists
-        # self.state[4] = linear_vel[0]
-        # self.state[5] = angular_vel[2]
-        # self.state[6:9] = position
-        # self.state[9] = yaw
-        # self.state[10:12] = self.heading_vec
-        # self.state[12] = self.delta
+            front_sensor = self.sensors.get_distances(position, yaw)[0]
 
-        ### Without sensors :
+            self.state[0] = front_sensor
+            self.state[1] = linear_vel[0]
+            self.state[2] = angular_vel[2]
+            self.state[3:6] = position
+            self.state[6] = yaw
+            self.state[7:9] = self.heading_vec
+            self.state[9] = self.delta
+        
+        elif self.sensors:
 
-        self.state[0] = linear_vel[0]
-        self.state[1] = angular_vel[2]
-        self.state[2:5] = position
-        self.state[5] = yaw
-        self.state[6:8] = self.heading_vec
-        self.state[8] = self.delta
+            dists = self.sensors.get_distances(position=position,
+                                               yaw=yaw)
+            self.state[0:4] = dists
+            self.state[4] = linear_vel[0]
+            self.state[5] = angular_vel[2]
+            self.state[6:9] = position
+            self.state[9] = yaw
+            self.state[10:12] = self.heading_vec
+            self.state[12] = self.delta
+
+        else:
+
+            self.state[0] = linear_vel[0]
+            self.state[1] = angular_vel[2]
+            self.state[2:5] = position
+            self.state[5] = yaw
+            self.state[6:8] = self.heading_vec
+            self.state[8] = self.delta
 
         self.state = np.round(self.state, 4)
 
@@ -270,6 +321,10 @@ class PrexIsaacEnv(gym.Env):
         delta = np.arccos(np.clip(costdelta, -1.0, 1.0)) 
 
         reward = - delta - self.dist  
+
+        if self.cube:
+            if self.state[0] < 0.35:
+                reward -= 0.6
 
         if self.step_counter >= self.max_episode_length:
             truncated = True

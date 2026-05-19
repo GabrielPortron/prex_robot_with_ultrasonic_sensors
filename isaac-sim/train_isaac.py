@@ -22,6 +22,8 @@ from envs.prex_isaac_env import PrexIsaacEnv
 parser = argparse.ArgumentParser()
 parser.add_argument("--no-wandb", action="store_true",
                     help="Disable Weights & Biases logging")
+parser.add_argument("--cube", action="store_true",
+                    help="Spawns a cube for the training")
 args_main = parser.parse_args()
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -64,6 +66,8 @@ env = PrexIsaacEnv(
     physics_dt=1.0/60.0,
     rendering_dt=1.0,
     verbose=args["verbose"],
+    cube=args_main.cube,
+    sensors=False,
     clipping_limit=args["clipping_limit"],
     max_speed_bonus=args["max_speed_bonus"],
     repeating_action=args["repeating_action"],

@@ -27,6 +27,8 @@ from envs.prex_isaac_env import PrexIsaacEnv
 parser = argparse.ArgumentParser()
 parser.add_argument("--no-wandb", action="store_true",
                     help="Disable Weights & Biases logging")
+parser.add_argument("--cube", action="store_true",
+                    help="Spawns a cube for the training")
 args_main = parser.parse_args()
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -69,6 +71,8 @@ env = PrexIsaacEnv(
     physics_dt=1.0/60.0,
     rendering_dt=1.0/15.0,
     verbose=args["verbose"],
+    cube=args_main.cube,
+    sensors=False,
     clipping_limit=args["clipping_limit"],
     max_speed_bonus=args["max_speed_bonus"],
     repeating_action=args["repeating_action"],
@@ -139,7 +143,11 @@ images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac
 os.makedirs(images_path, exist_ok=True)
 
 print("loading weights...")
-agent.load_weights("/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/20260512_111705/prex_ultrasonic_robot_policy_3600_weights.pth")
+# Model with sensors :
+# agent.load_weights("/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/20260512_111705/prex_ultrasonic_robot_policy_3600_weights.pth")
+
+# Model without sensors :
+agent.load_weights("/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/20260518_155021/prex_ultrasonic_robot_policy_1500_weights.pth")
 agent.set_to_eval_mode()
 
 # --- 5 - Playing -------------------------------------------------------------
