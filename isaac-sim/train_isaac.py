@@ -44,32 +44,10 @@ last_mod_time = os.path.getmtime(file_config_path)
 # Uncomment below when debugging
 # args_main.no_wandb = True 
 
-TOTAL_TIMESTEPS = 200_000
-CHECKPOINT_FREQ = 300
+TOTAL_TIMESTEPS = 4_000_000
+CHECKPOINT_FREQ = 100_000
 
 device = "cuda"
-
-# --- 2 - Creating environment --------------------------------------------
-print("[Training] I - Creating environment...")
-
-env = PrexIsaacEnv(
-    max_episode_length=args["max_steps"],
-    max_linear_speed=args["max_linear_speed"],
-    max_angular_speed=args["max_angular_speed"],
-    radius_target=args["radius_target"],
-    physics_dt=1.0/60.0,
-    rendering_dt=1.0,
-    verbose=args["verbose"],
-    cube=args_main.cube,
-    sensors=False,
-    clipping_limit=args["clipping_limit"],
-    max_speed_bonus=args["max_speed_bonus"],
-    repeating_action=args["repeating_action"],
-    device=device,
-    arena_geometry=[(2.0, 2.0), 0.2, 0.5],
-)
-
-print("[Training] ... Environment created")
 
 
 ### --- PPO --- ###
@@ -83,25 +61,48 @@ if args_main.ppo:
     from stable_baselines3.common.monitor import Monitor
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-    from wandb.integration.sb3 import WandbCallback
+    from algorithms.callbacks.wandb_callback import PPOWandbCallback
+    from algorithms.callbacks.video_callback import VideoCallback
 
     PPO_CONFIG = dict(
-    learning_rate=1e-4,
+    learning_rate=3e-5,
     n_steps=4096,  
-    batch_size=128,
+    batch_size=64,
     n_epochs=5,      
-    gamma=0.995,     
-    gae_lambda=0.95,     
+    gamma=0.87,     
+    gae_lambda=0.99,     
     clip_range=0.1,      
-    ent_coef=0.005,     
-    vf_coef=0.5,      
+    ent_coef=0.001,     
+    vf_coef=0.5,
+    target_kl=0.27,      
     max_grad_norm=0.5,
     policy_kwargs=dict(net_arch=[256, 256, 128]),
     verbose=args["verbose"],
     tensorboard_log=LOGS_DIR,
     device="cpu"
     )
-    
+
+    # --- 2 - Creating environment --------------------------------------------
+    print("[Training] I - Creating environment...")
+
+    env = PrexIsaacEnv(
+        max_episode_length=args["max_steps"],
+        max_linear_speed=args["max_linear_speed"],
+        max_angular_speed=args["max_angular_speed"],
+        radius_target=args["radius_target"],
+        physics_dt=1.0/60.0,
+        rendering_dt=1.0,
+        verbose=args["verbose"],
+        ppo=True,
+        cube=args_main.cube,
+        sensors=False,
+        clipping_limit=args["clipping_limit"],
+        max_speed_bonus=args["max_speed_bonus"],
+        repeating_action=args["repeating_action"],
+        device=device,
+        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
+    )
+
     monitored_env = Monitor(env, filename=os.path.join(LOGS_DIR, "monitor.csv"))
 
     vec_env = DummyVecEnv([lambda: monitored_env])
@@ -114,6 +115,8 @@ if args_main.ppo:
         gamma=0.995
     )
 
+    print("[Training] ... Environment created")
+    
     # --- 3 - Setting the callbacks ----------------------------------------
     callbacks = []
 
@@ -125,13 +128,7 @@ if args_main.ppo:
             sync_tensorboard=True,
             save_code=True,
         )
-        callbacks.append(
-            WandbCallback(
-                gradient_save_freq=1000,
-                model_save_path=os.path.join(MODELS_DIR, "wandb"),
-                verbose=1
-            )
-        )
+        callbacks.append(PPOWandbCallback())
 
     callbacks.append(
         CheckpointCallback(
@@ -143,6 +140,20 @@ if args_main.ppo:
     )
 
     callback = CallbackList(callbacks)
+
+    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
+    os.makedirs(output_path, exist_ok=True)
+
+    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
+
+    callbacks.append(
+        VideoCallback(
+            output_path=output_path,
+            images_path=images_path,
+            n_steps=args["max_steps"],
+            fps=15
+        )
+    )
 
     # --- 4 - Creating agent -----------------------------------------------
     model = PPO("MlpPolicy", env, **PPO_CONFIG)
@@ -171,6 +182,29 @@ if args_main.ppo:
 
 ### --- SAC --- ###
 else:
+    # --- 2 - Creating environment --------------------------------------------
+    print("[Training] I - Creating environment...")
+
+    env = PrexIsaacEnv(
+        max_episode_length=args["max_steps"],
+        max_linear_speed=args["max_linear_speed"],
+        max_angular_speed=args["max_angular_speed"],
+        radius_target=args["radius_target"],
+        physics_dt=1.0/60.0,
+        rendering_dt=1.0,
+        verbose=args["verbose"],
+        ppo=False,
+        cube=args_main.cube,
+        sensors=False,
+        clipping_limit=args["clipping_limit"],
+        max_speed_bonus=args["max_speed_bonus"],
+        repeating_action=args["repeating_action"],
+        device=device,
+        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
+    )
+
+    print("[Training] ... Environment created")
+
     # --- 3 - Creating replay buffer ---------------------------------------
     print("[Training] II - Creating replay buffer...")
 

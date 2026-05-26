@@ -48,39 +48,17 @@ last_mod_time = os.path.getmtime(file_config_path)
 
 device = "cuda"
 
-model_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/" + args_main.model +f"prex_ultrasonic_robot_policy_{args_main.weight:.3f}_weights.pth"
+model_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/" + args_main.model + f"/prex_ultrasonic_robot_policy_{args_main.weight}_weights.pth"
 
-# --- 2 - Creating environment --------------------------------------------
-print("[Playing] I - Creating environment...")
-
-env = PrexIsaacEnv(
-    max_episode_length=args["max_steps"],
-    max_linear_speed=args["max_linear_speed"],
-    max_angular_speed=args["max_angular_speed"],
-    radius_target=args["radius_target"],
-    physics_dt=1.0/60.0,
-    rendering_dt=1.0/15.0,
-    verbose=args["verbose"],
-    cube=args_main.cube,
-    sensors=False,
-    clipping_limit=args["clipping_limit"],
-    max_speed_bonus=args["max_speed_bonus"],
-    repeating_action=args["repeating_action"],
-    device=device,
-    arena_geometry=[(2.0, 2.0), 0.2, 0.5],
-)
-
-print("[Playing] ... Environment created")
-
-# --- 3 - Setting up Camera ----------------------------------------------
-print("[Playing] II - Setting up Camera...")
+# --- 2 - Setting up Camera ----------------------------------------------
+print("[Playing] I - Setting up Camera...")
 
 from isaacsim.sensors.camera import Camera
 
 camera = Camera(
     prim_path="/World/camera",
     position=np.array([0.0, 0.0, 5.0]),
-    orientation=np.array(euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True)),
+    orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
     frequency=15,
     resolution=(1024, 1024)
 )
@@ -103,12 +81,35 @@ if args_main.ppo:
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
+    # --- 3 - Creating environment --------------------------------------------
+    print("[Playing] II - Creating environment...")
+
+    env = PrexIsaacEnv(
+        max_episode_length=args["max_steps"],
+        max_linear_speed=args["max_linear_speed"],
+        max_angular_speed=args["max_angular_speed"],
+        radius_target=args["radius_target"],
+        physics_dt=1.0/60.0,
+        rendering_dt=1.0/15.0,
+        verbose=args["verbose"],
+        ppo=True,
+        cube=args_main.cube,
+        sensors=False,
+        clipping_limit=args["clipping_limit"],
+        max_speed_bonus=args["max_speed_bonus"],
+        repeating_action=args["repeating_action"],
+        device=device,
+        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
+    )
+
+    print("[Playing] ... Environment created")
+
     # --- 4 - Wrap environment ----------------------------------------------
     print("[Playing] III - Wrapping environment...")
     vec_env = DummyVecEnv([lambda: env])
 
-    model_path = os.path.join(args.model, "ppo_prex_final")
-    env_path = os.path.join(args.model, "vec_normalize.pkl")
+    model_path = os.path.join(f"models/{args_main.model}", "ppo_prex_final")
+    env_path = os.path.join(f"models/{args_main.model}", "vec_normalize.pkl")
 
     env = VecNormalize.load(
         env_path,
@@ -164,6 +165,29 @@ if args_main.ppo:
 
 ### --- SAC --- ###
 else:
+    # --- 3 - Creating environment --------------------------------------------
+    print("[Playing] I - Creating environment...")
+
+    env = PrexIsaacEnv(
+        max_episode_length=args["max_steps"],
+        max_linear_speed=args["max_linear_speed"],
+        max_angular_speed=args["max_angular_speed"],
+        radius_target=args["radius_target"],
+        physics_dt=1.0/60.0,
+        rendering_dt=1.0/15.0,
+        verbose=args["verbose"],
+        ppo=False,
+        cube=args_main.cube,
+        sensors=False,
+        clipping_limit=args["clipping_limit"],
+        max_speed_bonus=args["max_speed_bonus"],
+        repeating_action=args["repeating_action"],
+        device=device,
+        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
+    )
+
+    print("[Playing] ... Environment created")
+
     # --- 4 - Creating replay buffer ------------------------------------------
     print("[Playing] III - Creating replay buffer...")
 

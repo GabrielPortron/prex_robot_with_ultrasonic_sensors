@@ -14,6 +14,7 @@ class PrexIsaacEnv(gym.Env):
             physics_dt=1.0/60.0,
             rendering_dt=1.0,
             verbose=False,
+            ppo=False,
             cube=False,
             sensors=False,
             clipping_limit=20.0,
@@ -37,8 +38,9 @@ class PrexIsaacEnv(gym.Env):
         self.physics_dt = physics_dt
         self.rendering_dt = rendering_dt
         self.verbose = verbose
+        self.ppo = ppo
         self.cube = cube
-        self.sensors=sensors
+        self.has_sensors=sensors
         self.clipping_limit = clipping_limit
         self.max_speed_bonus = max_speed_bonus
         self.repeating_action = repeating_action
@@ -68,7 +70,7 @@ class PrexIsaacEnv(gym.Env):
             )
             self.state = np.zeros(10, dtype=np.float32)
 
-        elif self.sensors:
+        elif self.has_sensors:
             self.observation_space = Box(
                 low=np.array([-4.0, -4.0, -4.0, -4.0,
                             -self.max_linear_speed, -self.max_angular_speed,
@@ -280,7 +282,7 @@ class PrexIsaacEnv(gym.Env):
             self.state[7:9] = self.heading_vec
             self.state[9] = self.delta
         
-        elif self.sensors:
+        elif self.has_sensors:
 
             dists = self.sensors.get_distances(position=position,
                                                yaw=yaw)
@@ -320,16 +322,19 @@ class PrexIsaacEnv(gym.Env):
         costdelta = np.dot(pos_vec, heading_vec) / (np.linalg.norm(pos_vec) * np.linalg.norm(heading_vec) + 1e-8)
         delta = np.arccos(np.clip(costdelta, -1.0, 1.0)) 
 
-        reward = - delta - self.dist  
+        if self.ppo:
+            reward = 1 / (delta + 0.3) + 1 / (self.dist + 0.01) 
+        else:
+            reward = - delta - self.dist  
 
         if self.cube:
             if self.state[0] < 0.35:
-                reward -= 0.6
+                reward -= 0.05
 
         if self.step_counter >= self.max_episode_length:
             truncated = True
             self.info["terminate"] = "max episode length"
-            reward = -5.0
+            reward = -1.0
 
         if self.position[2] > 0.40 or self.dist > 4.0:
             terminated = True
