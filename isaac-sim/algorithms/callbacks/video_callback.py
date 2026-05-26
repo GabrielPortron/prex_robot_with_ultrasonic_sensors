@@ -1,0 +1,113 @@
+import os
+import math
+import shutil
+import numpy as np
+import wandb
+from datetime import datetime
+from PIL import Image
+
+from stable_baselines3.common.callbacks import BaseCallback
+
+from utils.utils import euler_to_quaternion, create_video
+
+class VideoCallback(BaseCallback):
+
+    def __init__(self,
+                 output_path,
+                 images_path,
+                 record_every_n_episodes=10_000,
+                 n_steps=150,
+                 fps=30,
+                 resolution=(1024, 1024),
+                 verbose=0 
+                ):
+        
+        super().__init__(verbose)
+
+        self.output_path = output_path
+        self.images_path = images_path
+        
+        self.record_every = record_every_n_episodes
+        self.n_steps = n_steps
+        self.fps = fps
+        self.resolution = resolution
+        self._episode_count = 0
+    
+    def _on_training_start(self):
+        
+        from isaacsim.sensors.camera import Camera
+
+        self.camera = Camera(
+            prim_path="/World/camera",
+            position=np.array([0.0, 0.0, 5.0]),
+            orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
+            frequency=self.fps,
+            resolution=self.resolution
+        )
+
+        self.camera.initialize()
+        print("[VideoCallback] Camera initialised.")
+
+    def _on_step(self):
+
+        done = self.locals["dones"][0]
+
+        if done:
+            self._episode_count += 1
+            if self._episode_count % self.record_every == 0:
+                self._record_episode()
+
+        return True
+    
+    def _record_episode(self):
+        env = self._get_raw_env()
+
+        obs = self.training_env.reset()
+        done = False
+        step = 0
+
+        os.makedirs(self.images_path, exist_ok=True)
+
+        for _ in range(10):
+            env.world.step(render=True)
+            self.camera.get_current_frame() 
+
+        for _ in range(self.n_steps):
+
+            action, _ = self.model.predict(obs, deterministic=True)
+            obs, _, done, _ = self.training_env.step(action)
+
+            env.world.step(render=True)
+
+            self.camera.get_current_frame()
+            rgb = self.camera.get_rgb()
+            image = Image.fromarray(rgb)
+            save_path = os.path.join(self.images_path, f"ep{self._episode_count}_rgb_{step:04d}.png")
+            image.save(save_path)
+
+            step += 1
+
+            if done[0]:
+                break
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        video_name = "episode_" + timestamp + ".mp4"
+        video_path = os.path.join(self.output_path, video_name)
+
+        create_video(video_path, self.images_path, self.fps)
+        shutil.rmtree(self.images_path)
+
+        print("[VideoCallback] Done. ")
+        print(f"Command to use to get the video : scp g.portron@10.163.11.19:{video_path} Téléchargements/")
+    
+    def _get_raw_env(self):
+        env = self.training_env
+
+        if hasattr(env, "venv"):
+            env = env.venv
+        if hasattr(env, "envs"):
+            env = env.envs[0]
+        if hasattr(env, "env"):
+            env = env.env
+
+        return env
