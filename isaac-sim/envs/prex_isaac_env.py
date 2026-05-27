@@ -125,22 +125,42 @@ class State:
         )
         self.state = np.zeros(self.state_length, dtype=np.float32)
 
-    def update_state(self, new_state: np.ndarray) -> None:
-        """Overwrites the internal state vector with new values and rounds to
-        5 decimal places to reduce floating-point noise.
+    def update_state(self,
+                    sensors: np.ndarray,
+                    position: np.ndarray,
+                    orientation: float | np.ndarray,
+                    linear_speed: float | np.ndarray,
+                    angular_speed: float | np.ndarray,
+                    heading_vec: np.ndarray
+                    ) -> None:
+        """Overwrites the internal state vector by concatenating the individual
+        components in declaration order and rounding to 5 decimal places to
+        reduce floating-point noise.
+
+        Each argument corresponds to one group in the State configuration. Only
+        the components that were declared as non-None in __init__ are present in
+        the internal vector, but the caller is responsible for passing the full
+        arrays — filtering is handled by init_spaces(), not here.
 
         Args:
-            new_state (np.ndarray): 1D array of length state_length containing
-                the new state values in the same order as declared in __init__
-                (sensors → position → orientation → linear_speed →
-                angular_speed → heading_vec).
-
-        Raises:
-            ValueError: Implicitly, if new_state has a different length than
-                state_length — the assignment will silently truncate or pad
-                in the current implementation, so callers must ensure correct
-                length.
+            sensors (np.ndarray): Sensor distance readings, shape (n_sensors,).
+            position (np.ndarray): Robot world-frame position [x, y, z],
+                shape (3,).
+            orientation (float | np.ndarray): Yaw angle in radians (scalar), or
+                full orientation array if more angles are included.
+            linear_speed (float | np.ndarray): Forward speed in m/s (scalar), or
+                array if multiple velocity components are included.
+            angular_speed (float | np.ndarray): Yaw rate in rad/s (scalar), or
+                array if multiple angular velocity components are included.
+            heading_vec (np.ndarray): Concatenated heading vector and angular
+                error [cos_yaw, sin_yaw, delta], shape (3,).
         """
+        new_state = np.concatenate([sensors,
+                                    position,
+                                    orientation,
+                                    linear_speed,
+                                    angular_speed,
+                                    heading_vec])
         for i, value in enumerate(new_state):
             self.state[i] = value
         self.state = np.round(self.state, 5)
@@ -242,7 +262,7 @@ class PrexIsaacEnv(gym.Env):
         self.rendering_dt       = rendering_dt
         self.verbose            = verbose
         self.ppo                = ppo
-        self.cube               = cube
+        self.has_cube               = cube
         self.has_sensors        = sensors
         self.repeating_action   = repeating_action
         self.device             = device
@@ -289,6 +309,7 @@ class PrexIsaacEnv(gym.Env):
         self.linear_speed    = 0.0
         self.angular_speed   = 0.0
         self.position        = np.zeros(3,  dtype=np.float32)
+        self.orientation     = np.zeros(3,  dtype=np.float32)
         self.step_counter    = 0
         self.episode_counter = 0
         self.timestep        = 0
@@ -302,8 +323,9 @@ class PrexIsaacEnv(gym.Env):
         self.arena   = None
         self.robot   = None
         self.sensors = None
+        self.cube    = None
 
-        assert not (self.cube and self.has_sensors), \
+        assert not (self.has_cube and self.has_sensors), \
             "cube and sensors are mutually exclusive — enable only one."
 
         self.launch()
@@ -347,7 +369,7 @@ class PrexIsaacEnv(gym.Env):
         )
         self.arena.build()
 
-        if self.cube:
+        if self.has_cube:
             from envs.isaacsim_elements.cube import Cube
             self.cube = Cube(
                 world=self.world,
@@ -428,7 +450,7 @@ class PrexIsaacEnv(gym.Env):
         self.read_state()
         self.prev_dist = self.dist
 
-        if self.cube:
+        if self.has_cube:
             self.cube.teleport_cube(
                 target_radius=self.radius_target,
                 robot_position=self.position[:2],
@@ -491,30 +513,31 @@ class PrexIsaacEnv(gym.Env):
         derived quantities (heading vector, angular error delta), and updates
         the internal State object.
 
-        The state vector is assembled in this order, matching the declaration
-        in __init__:
+        The state vector is assembled in this order, matching the State
+        declaration in __init__:
             [d_front, d_back, d_left, d_right,  ← sensor distances
-             x, y, z,                            ← position
-             yaw,                                ← orientation
-             vx,                                 ← linear speed
-             wz,                                 ← angular speed
-             cos_yaw, sin_yaw, delta]            ← heading vector + angle error
+            x, y, z,                            ← position
+            yaw,                                ← orientation (yaw only)
+            vx,                                 ← forward linear speed
+            wz,                                 ← yaw rate
+            cos_yaw, sin_yaw, delta]            ← heading vector + angle error
 
         delta is the angle between the robot's heading vector and the vector
-        from the robot to the goal (origin). It is zero when the robot faces
-        directly toward the goal and π when facing directly away.
+        pointing from the robot toward the goal (origin). It is zero when the
+        robot faces directly toward the goal and π when facing directly away.
 
         Updates:
             self.position, self.theta, self.linear_speed, self.angular_speed,
-            self.dist, self.heading_vec, self.delta, and the internal
-            State vector via State.update_state().
+            self.dist, self.heading_vec, self.delta, and the internal State
+            vector via State.update_state().
         """
         robot_state = self.robot.get_state()
 
         self.position     = position = robot_state["position"]
+        orientation       = robot_state["orientation"]
         linear_vel        = robot_state["linear_vel"]
         angular_vel       = robot_state["angular_vel"]
-        self.theta        = yaw = robot_state["yaw"]
+        self.theta        = yaw = float(orientation[2])
         self.linear_speed = float(linear_vel[0])
         self.angular_speed = float(angular_vel[2])
         self.dist         = float(np.linalg.norm(position[:2] - self.goal))
@@ -532,17 +555,12 @@ class PrexIsaacEnv(gym.Env):
 
         sensors_dists = self.sensors.get_distances(position, yaw)
 
-        new_state = np.concatenate([
-            sensors_dists,                          # 4
-            self.position,                          # 3
-            [self.theta],                           # 1
-            [self.linear_speed],                    # 1
-            [self.angular_speed],                   # 1
-            self.heading_vec,                       # 2
-            [self.delta],                           # 1
-        ])                                          # total: 13
-
-        self.state.update_state(new_state)
+        self.state.update_state(sensors=sensors_dists,
+                                position=self.position,
+                                orientation=np.array([self.theta]),
+                                linear_speed=np.array([self.linear_speed]),
+                                angular_speed=np.array([self.angular_speed]),
+                                heading_vec=np.concatenate([self.heading_vec, self.delta]))
 
     def update_reward(
             self,
@@ -591,7 +609,7 @@ class PrexIsaacEnv(gym.Env):
         else:
             reward = -self.delta - self.dist
 
-        if self.cube and state[0] < 0.35:
+        if self.has_cube and self.state.get_state()[0] < 0.35:
             reward -= 0.05
 
         if self.step_counter >= self.max_episode_length:
