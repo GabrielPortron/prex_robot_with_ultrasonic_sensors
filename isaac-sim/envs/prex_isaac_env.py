@@ -4,6 +4,91 @@ import math
 import gymnasium as gym
 from gymnasium.spaces import Box
 
+
+class State:
+    def __init__(
+            self,
+            sensors,
+            position,
+            orientation,
+            linear_speed,
+            angular_speed,
+            heading_vec,
+    ):
+        
+        self.sensors = sensors
+        self.position = position
+        self.orientation = orientation
+        self.linear_speed = linear_speed
+        self.angular_speed = angular_speed
+        self.heading_vec = heading_vec
+
+        self.state_low = []
+        self.state_high = []
+        self.state_length = 0
+
+    def init_spaces(self):
+
+        for sensor in self.sensors:
+            if self.sensors[sensor] != None:
+                self.state_low.append(-self.sensors[sensor])
+                self.state_high.append(self.sensors[sensor])
+                self.state_length += 1
+
+        for coordinate in self.position:
+            if self.position[coordinate] != None:
+                self.state_low.append(-self.position[coordinate])
+                self.state_high.append(self.position[coordinate])
+                self.state_length += 1
+        
+        for angle in self.orientation:
+            if self.orientation[angle] != None:
+                self.state_low.append(-self.orientation[angle])
+                self.state_high.append(self.orientation[angle])
+                self.state_length += 1
+        
+        for lin_vel in self.linear_speed:
+            if self.linear_speed[lin_vel] != None:
+                self.state_low.append(-self.linear_speed[lin_vel])
+                self.state_high.append(self.linear_speed[lin_vel])
+                self.state_length += 1
+        
+        for ang_vel in self.angular_speed:
+            if self.angular_speed[ang_vel] != None:
+                self.state_low.append(-self.angular_speed[ang_vel])
+                self.state_high.append(self.angular_speed[ang_vel])
+                self.state_length += 1
+        
+        if self.heading_vec != None:
+            self.state_low.append(-self.heading_vec)
+            self.state_high.append(self.heading_vec)
+            self.state_length += 3
+        
+        self.state_low = np.array(self.state_low)
+        self.state_high = np.array(self.state_high)
+    
+        self.observation_space = Box(low=self.state_low,
+                                high=self.state_high,
+                                dtype=np.float32)
+        
+        self.state = np.zeros(self.state_length, dtype=np.float32)
+
+    def update_state(self, new_state):
+
+        state_index = 0
+        for state_element in new_state:
+            self.state[state_index] = state_element
+            state_index += 1
+        
+        self.state = np.round(self.state, 5)
+        
+    def get_state(self):
+        return self.state
+    
+    def get_observation_space(self):
+        return self.observation_space
+        
+
 class PrexIsaacEnv(gym.Env):
     def __init__(
             self,
@@ -17,8 +102,6 @@ class PrexIsaacEnv(gym.Env):
             ppo=False,
             cube=False,
             sensors=False,
-            clipping_limit=20.0,
-            max_speed_bonus=5.0,
             repeating_action=1,
             device="cuda",
             seed=None,
@@ -41,8 +124,6 @@ class PrexIsaacEnv(gym.Env):
         self.ppo = ppo
         self.cube = cube
         self.has_sensors=sensors
-        self.clipping_limit = clipping_limit
-        self.max_speed_bonus = max_speed_bonus
         self.repeating_action = repeating_action
         self.device = device
         self.seed = seed
@@ -59,42 +140,43 @@ class PrexIsaacEnv(gym.Env):
             high=np.array([ self.max_linear_speed,  self.max_angular_speed]),
             dtype=np.float32
         )
-
-        if self.cube:
-            self.observation_space = Box(
-            low=np.array([-4.0, -self.max_linear_speed, -self.max_angular_speed,
-                        -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
-            high=np.array([4.0, self.max_linear_speed, self.max_angular_speed,
-                        1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
-            dtype=np.float32
-            )
-            self.state = np.zeros(10, dtype=np.float32)
-
-        elif self.has_sensors:
-            self.observation_space = Box(
-                low=np.array([-4.0, -4.0, -4.0, -4.0,
-                            -self.max_linear_speed, -self.max_angular_speed,
-                            -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
-                high=np.array([4.0, 4.0, 4.0, 4.0,
-                            self.max_linear_speed, self.max_angular_speed,
-                            1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
-                dtype=np.float32
-            )
-            self.state = np.zeros(13, dtype=np.float32)
-
-        else:            
-            self.observation_space = Box(
-                low=np.array([-self.max_linear_speed, -self.max_angular_speed,
-                            -1.0, -1.0, -2.0, -math.pi, -1.0, -1.0, -100.0]),
-                high=np.array([self.max_linear_speed, self.max_angular_speed,
-                            1.0, 1.0, 2.0, math.pi, 1.0, 1.0, 100.0]),
-                dtype=np.float32
-            )        
-            self.state = np.zeros(9, dtype=np.float32)
             
         self.max_bounds = np.array(
             [self.max_linear_speed, self.max_angular_speed], dtype=np.float32
         )
+
+        self.state = State(
+            sensors={
+                "front": 4.0,
+                "back": 4.0,
+                "left": 4.0,
+                "right": 4.0,
+            },
+            position={
+                "x": 2.0,
+                "y": 2.0,
+                "z": 2.0,
+            },
+            orientation={
+                "roll": None,
+                "pitch": None,
+                "yaw": math.pi,
+            },
+            linear_speed={
+                "vx": self.max_linear_speed,
+                "vy": None,
+                "vz": None,
+            },
+            angular_speed={
+                "wx": None,
+                "wy": None,
+                "wz": self.max_angular_speed,
+            },
+            heading_vec=(1.0, 1.0, 100.0),
+        )
+        self.state.init_spaces()
+
+        self.observation_space = self.state.get_observation_space()
 
         # --- Internal State ---------------------------------------------
         self.perimeter = arena_geometry[0]
@@ -139,9 +221,9 @@ class PrexIsaacEnv(gym.Env):
         # --- 2. Import Isaac API ----------------------------------------
         from isaacsim.core.api import World
 
-        from envs.arena import Arena
-        from envs.robot import Create3Robot
-        from envs.sensors import UltrasonicSensors
+        from envs.isaacsim_elements.arena import Arena
+        from robots.differential_robot import Create3Robot
+        from envs.isaacsim_elements.sensors import UltrasonicSensors
 
         # --- 3. Create world --------------------------------------------
         self.world = World()
@@ -157,7 +239,7 @@ class PrexIsaacEnv(gym.Env):
 
         # --- 5. Create Cube ----------------------------------------------
         if self.cube:
-            from envs.cube import Cube
+            from envs.isaacsim_elements.cube import Cube
 
             self.cube = Cube(
             world=self.world,
@@ -180,7 +262,7 @@ class PrexIsaacEnv(gym.Env):
         for _ in range(30):
             self.world.step(render=False)
     
-    def spawn_robot(self):
+    def spawn_robot_random_pos(self):
 
         margin = 0.3
         
@@ -191,7 +273,11 @@ class PrexIsaacEnv(gym.Env):
         spawn_y = np.random.uniform(-hy, hy)
         spawn_yaw = np.random.uniform(-math.pi, math.pi)
 
-        return spawn_x, spawn_y, spawn_yaw
+        self.robot.teleport(position=np.array([spawn_x, spawn_y, 0.0]), yaw=spawn_yaw)
+        self.robot.stop()
+
+        if self.verbose:
+            print(f"[reset] spawn=({spawn_x:.2f},{spawn_y:.2f}) yaw={spawn_yaw:.2f} dist={self.dist:.2f}")
 
     def reset(self, seed=None, options=None):
 
@@ -201,10 +287,8 @@ class PrexIsaacEnv(gym.Env):
         self.step_counter = 0
         self.info.clear()
 
-        spawn_x, spawn_y, spawn_yaw = self.spawn_robot()
+        self.spawn_robot_random_pos()
 
-        self.robot.teleport(position=np.array([spawn_x, spawn_y, 0.0]), yaw=spawn_yaw)
-        self.robot.stop()
         self.last_action = np.zeros(2)
 
         self.read_state()
@@ -214,18 +298,11 @@ class PrexIsaacEnv(gym.Env):
         if self.cube:
             robot_position = self.position[:2]
 
-            cube_yaw = np.random.uniform(-math.pi, math.pi)
-            cube_orientation = np.array([math.cos(cube_yaw/2.0), 0.0, 0.0, math.sin(cube_yaw/2.0)])
-
-            cube_position = self.cube.teleport_cube(
-                orientation=cube_orientation,
+            self.cube.teleport_cube(
                 target_radius=self.radius_target,
                 robot_position=robot_position,
                 robot_size=0.4
             )
-
-        if self.verbose:
-            print(f"[reset] spawn=({spawn_x:.2f},{spawn_y:.2f}) yaw={spawn_yaw:.2f} dist={self.dist:.2f} cube_position={cube_position:.2f}")
 
         return self.state.copy(), self.info
     
@@ -256,76 +333,57 @@ class PrexIsaacEnv(gym.Env):
 
         robot_state = self.robot.get_state()
 
-        position = robot_state["position"]
+        self.position = position = robot_state["position"]
         linear_vel = robot_state["linear_vel"]
         angular_vel = robot_state["angular_vel"]
-        yaw = robot_state["yaw"]
+        self.theta = yaw = robot_state["yaw"]
+
+        self.linear_speed = float(linear_vel[0])
+        self.angular_speed = float(angular_vel[2])
+        self.dist = float(np.linalg.norm(position[:2] - self.goal))
 
         self.heading_vec = np.array([math.cos(yaw), math.sin(yaw)], dtype=np.float32)
         pos_vec = position[:2]
-        norm = np.linalg.norm(pos_vec)
-        if norm > 1e-6:
-            cos_delta = np.dot(pos_vec, self.heading_vec) / (norm * 1.0)
+        norm_pos_vec = np.linalg.norm(pos_vec)
+        if norm_pos_vec > 1e-6:
+            cos_delta = np.dot(pos_vec, self.heading_vec) / (norm_pos_vec * 1.0)
             self.delta = float(np.arccos(np.clip(cos_delta, -1.0, 1.0)))
         else:
             self.delta = 0.0
 
-        if self.cube:
+        new_state = np.array([])
 
-            front_sensor = self.sensors.get_distances(position, yaw)[0]
+        # --- 1/ Sensors ---
+        sensors_dists = self.sensors.get_distances(position, yaw)
+        new_state = np.append(new_state, sensors_dists)
 
-            self.state[0] = front_sensor
-            self.state[1] = linear_vel[0]
-            self.state[2] = angular_vel[2]
-            self.state[3:6] = position
-            self.state[6] = yaw
-            self.state[7:9] = self.heading_vec
-            self.state[9] = self.delta
-        
-        elif self.has_sensors:
+        # --- 2/ Position ---
+        new_state = np.append(new_state, self.position)
 
-            dists = self.sensors.get_distances(position=position,
-                                               yaw=yaw)
-            self.state[0:4] = dists
-            self.state[4] = linear_vel[0]
-            self.state[5] = angular_vel[2]
-            self.state[6:9] = position
-            self.state[9] = yaw
-            self.state[10:12] = self.heading_vec
-            self.state[12] = self.delta
+        # --- 3/ Orientation ---
+        new_state = np.append(new_state, self.theta)
 
-        else:
+        # --- 4/ Linear Speed ---
+        new_state = np.append(new_state, self.linear_speed)
 
-            self.state[0] = linear_vel[0]
-            self.state[1] = angular_vel[2]
-            self.state[2:5] = position
-            self.state[5] = yaw
-            self.state[6:8] = self.heading_vec
-            self.state[8] = self.delta
+        # --- 5/ Angular Speed ---
+        new_state = np.append(new_state, self.angular_speed)
 
-        self.state = np.round(self.state, 4)
+        # --- 6/ Heading Vector and Delta ---
+        new_state = np.append(new_state, self.heading_vec)
+        new_state = np.append(new_state, self.delta)
 
-        self.theta = yaw
-        self.position = position
-        self.linear_speed = float(linear_vel[0])
-        self.angular_speed = float(angular_vel[2])
-        self.dist = float(np.linalg.norm(position[:2] - self.goal))
+        self.state.update_state(new_state)
     
     def update_reward(self, state, action):
 
         terminated = False
         truncated  = False
 
-        pos_vec = self.position[:2]
-        heading_vec = np.array([np.cos(self.theta), np.sin(self.theta)])
-
-        costdelta = np.dot(pos_vec, heading_vec) / (np.linalg.norm(pos_vec) * np.linalg.norm(heading_vec) + 1e-8)
-        delta = np.arccos(np.clip(costdelta, -1.0, 1.0)) 
-
         if self.ppo:
-            reward = 1 / (delta + 0.3) + 1 / (self.dist + 0.01) 
+            reward = 1 / (self.delta + 0.3) + 1 / (self.dist + 0.01) 
         else:
-            reward = - delta - self.dist  
+            reward = - self.delta - self.dist  
 
         if self.cube:
             if self.state[0] < 0.35:

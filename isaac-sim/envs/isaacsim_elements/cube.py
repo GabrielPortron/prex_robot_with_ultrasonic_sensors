@@ -1,6 +1,7 @@
 from isaacsim.core.api.objects import FixedCuboid
 
 import numpy as np
+import math
 
 class Cube:
     def __init__(
@@ -34,8 +35,11 @@ class Cube:
 
         self.world.scene.add(self.cube)
 
-    def teleport_cube(self, orientation, target_radius, robot_position, robot_size):
+    def teleport_cube(self, target_radius, robot_position, robot_size):
 
+        cube_yaw = np.random.uniform(-math.pi, math.pi)
+        cube_orientation = np.array([math.cos(cube_yaw/2.0), 0.0, 0.0, math.sin(cube_yaw/2.0)])
+        
         has_valid_location = False
 
         while not has_valid_location:
@@ -52,6 +56,6 @@ class Cube:
         
         position = np.array([x, y, self.size / 2])
 
-        self.cube.set_world_pose(position, orientation)
+        self.cube.set_world_pose(position, cube_orientation)
 
         return position[:2]
