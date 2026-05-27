@@ -7,10 +7,17 @@ class Cube:
     def __init__(
             self,
             world,
-            scale=(0.2, 0.2, 0.2),
-            perimeter=(2.0, 2.0)
+            scale: tuple[float, float, float] =(0.2, 0.2, 0.2),
+            perimeter: tuple[float, float] =(2.0, 2.0)
     ):
-        
+        """The class that spawns a cubic obstacle for the robot's training.
+
+        Args:
+            world : The world in which we sapwn the cube
+            scale (tuple[float, float, float], optional): The scale of the cube. Defaults to (0.2, 0.2, 0.2).
+            perimeter (tuple[float, float], optional): The dimensions of the arena in which we spawn the cube. Defaults to (2.0, 2.0).
+        """
+
         self.world = world
         self.scale = scale
         self.size = self.scale[2]
@@ -22,6 +29,8 @@ class Cube:
         self.hy = (self.width / 2.0) - self.size / 2.0
     
     def create_cube(self):
+        """The function that create the cube and spanws it in the middle of the world.
+        """
 
         prim_path = "/World/Square_Arena/cube"
 
@@ -36,6 +45,16 @@ class Cube:
         self.world.scene.add(self.cube)
 
     def teleport_cube(self, target_radius, robot_position, robot_size):
+        """The function that teleports the cube in a random location, avoiding, the target area and the robot.
+
+        Args:
+            target_radius (float): The radius of the target area for the robot.
+            robot_position (tuple[float, float]): The current position of the robot.
+            robot_size (float): The size of the robot.
+
+        Returns:
+            _type_: _description_
+        """
 
         cube_yaw = np.random.uniform(-math.pi, math.pi)
         cube_orientation = np.array([math.cos(cube_yaw/2.0), 0.0, 0.0, math.sin(cube_yaw/2.0)])
@@ -57,5 +76,3 @@ class Cube:
         position = np.array([x, y, self.size / 2])
 
         self.cube.set_world_pose(position, cube_orientation)
-
-        return position[:2]

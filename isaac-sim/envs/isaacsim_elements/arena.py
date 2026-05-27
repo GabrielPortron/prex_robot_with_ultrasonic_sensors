@@ -6,10 +6,18 @@ class Arena:
     def __init__(
             self,
             world,
-            perimeter=(2.0, 2.0),
-            depth=0.2,
-            height=0.5
+            perimeter: tuple[float, float] =(2.0, 2.0),
+            depth: float =0.2,
+            height: float =0.5
     ):
+        """The class that creates a rectangular arena in IsaacSim.
+
+        Args:
+            world : The world in which the arena is created.
+            perimeter (tuple[float, float], optional): The dimensions of the arena: length and width. Defaults to (2.0, 2.0).
+            depth (float, optional): The depth of the walls of the arena. Defaults to 0.2.
+            height (float, optional): The height of the walls of the arena. Defaults to 0.5.
+        """
         
         self.world = world
 
@@ -23,6 +31,13 @@ class Arena:
         self.offset_width = (self.length + self.depth) / 2
     
     def create_wall(self, name, position, scale):
+        """The function that creates a wall to a given posiiton and scale.
+
+        Args:
+            name (str): The name of the wall.
+            position (tuple[float, float, float]): The position of the wall.
+            scale (tuple[float, float, float]): The scale of the wall.
+        """
 
         prim_path = f"/World/Square_Arena/{name}"
 
@@ -35,8 +50,9 @@ class Arena:
             )
         )
 
-    
     def build(self):
+        """The function that builds the entire arena and sets the ground in the world.
+        """
         
         self.world.scene.add_default_ground_plane()
 
