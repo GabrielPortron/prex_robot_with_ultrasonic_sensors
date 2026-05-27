@@ -6,112 +6,166 @@ from isaacsim.core.api.controllers import BaseController
 import numpy as np
 import math
 
-WHEEL_DISTANCE = 0.233
-WHEEL_RADIUS = 0.03575 
-MAX_LINEAR_SPEED = 0.22
-ROBOT_HEIGHT = 0.138
+from utils.utils import quaternion_to_euler
 
-assets_rooth_path = get_assets_root_path()
+ASSETS_ROOT_PATH = get_assets_root_path()
 
-asset_path = assets_rooth_path + "/Isaac/Robots/iRobot/Create3/create_3.usd"
 
 class Create3Robot:
     def __init__(
             self,
             world,
-            prim_path: str ="/World/create_3",
+            prim_path: str = "/World/create_3",
             position: np.ndarray | None = None
     ):
-        """The class that creates the Create3Robot.
+        """Wraps the iRobot Create3 USD asset and exposes a simple interface
+        for loading, controlling, and reading the state of the robot inside
+        Isaac Sim.
+
+        The robot uses a differential drive kinematics model: a linear velocity
+        command v (m/s) and angular velocity command w (rad/s) are converted to
+        individual wheel angular velocities by the RobotController and sent to
+        the physics articulation.
 
         Args:
-            world (_type_): The world in which the robot will be.
-            prim_path (str, optional): The path to which the instance of the robot has to be created. Defaults to "/World/create_3".
-            position (np.ndarray | None, optional): The base position of the robot. Defaults to None.
-        """
-        
-        self.world = world
-        self.prim_path = prim_path
-        self.position = position
-    
-    def load(self):
-        """The function that loads the robot into the world.
-        """
+            world: The Isaac Sim World instance the robot will be added to.
+            prim_path (str): USD prim path at which the robot is created in the
+                stage. Must be unique if multiple robots are present.
+                Defaults to "/World/create_3".
+            position (np.ndarray | None): Initial spawn position as a 1D array
+                [x, y, z] in metres. If None the robot is placed at the origin.
+                Defaults to None.
 
+        Attributes:
+            wheel_distance (float): Distance between the two drive wheels in
+                metres (axle length). Used by the controller for kinematics.
+            wheel_radius (float): Radius of each drive wheel in metres.
+            max_linear_speed (float): Hardware-limited maximum forward speed
+                in m/s, used to clamp wheel velocity commands.
+            asset_path (str): Full nucleus path to the Create3 USD file.
+        """
+        self.world      = world
+        self.prim_path  = prim_path
+        self.position   = position
+
+        self.wheel_distance    = 0.233
+        self.wheel_radius      = 0.03575
+        self.max_linear_speed  = 0.22
+
+        self.asset_path = ASSETS_ROOT_PATH + "/Isaac/Robots/iRobot/Create3/create_3.usd"
+
+    def load(self) -> None:
+        """Instantiates the Create3 WheeledRobot from the USD asset and adds
+        it to the world scene. Must be called before world.reset() and
+        robot.initialize().
+
+        The robot is spawned with a neutral orientation (quaternion [w=1, x=0,
+        y=0, z=0] — identity). Use teleport() after initialize() to set a
+        different starting pose.
+        """
         self.robot = WheeledRobot(
-            prim_path=self.prim_path,
-            name="create_3",
-            wheel_dof_names=["left_wheel_joint", "right_wheel_joint"],
-            usd_path=asset_path,
-            create_robot=True,
-            position=self.position,
-            orientation=np.array([0.0, 0.0, 0.0, 1.0])
+            prim_path      = self.prim_path,
+            name           = "create_3",
+            wheel_dof_names= ["left_wheel_joint", "right_wheel_joint"],
+            usd_path       = self.asset_path,
+            create_robot   = True,
+            position       = self.position,
+            orientation    = np.array([0.0, 0.0, 0.0, 1.0]),
+        )
+        self.world.scene.add(self.robot)
+
+    def initialize(self) -> None:
+        """Initialises the robot's physics articulation and creates the wheel
+        velocity controller. Must be called after world.reset() — the physics
+        simulation view does not exist before the first reset and calling this
+        earlier will raise an AttributeError.
+        """
+        self.robot.initialize()
+        self.controller = RobotController(
+            wheel_radius     = self.wheel_radius,
+            wheel_base       = self.wheel_distance,
+            max_linear_speed = self.max_linear_speed,
         )
 
-        self.world.scene.add(self.robot)
-    
-    def initialize(self):
-        """The function that initializes the physic of the robot. It has to be called after the first reset of the world.
-        """
-
-        self.robot.initialize()
-        self.controller = RobotController()
-    
-    def apply_action(self, command):
-        """The function that give instruction for the robot to move.
+    def apply_action(self, command: list) -> None:
+        """Converts a [v, w] body-frame command to wheel velocities and sends
+        it to the physics articulation.
 
         Args:
-            command (tuple[float, float]): The command the robot has to follow to move.
+            command (list[float, float]): [linear_velocity_m_s,
+                angular_velocity_rad_s]. Values outside the physical limits
+                are clamped by RobotController.forward().
         """
-
         self.robot.apply_wheel_actions(self.controller.forward(command=command))
 
-    def stop(self):
-        """The function that stops the robot.
+    def stop(self) -> None:
+        """Sends a zero-velocity command to both wheels, bringing the robot to
+        a stop. Useful at the start of each episode after teleporting to clear
+        any residual velocity from the previous episode.
         """
-
         self.robot.apply_wheel_actions(self.controller.forward(command=[0.0, 0.0]))
-    
-    def get_state(self):
-        """The function that returns the state of the robot : its position, speeds, and yaw.
+
+    def get_state(self) -> dict:
+        """Reads the robot's current kinematic state from the physics
+        simulation and returns it as a dict with all quantities expressed in
+        consistent frames.
+
+        Velocity frame conversion: Isaac Sim returns linear velocity in the
+        world frame. This method projects it onto the robot's body frame using
+        the current yaw so that linear_vel[0] is the true forward speed and
+        linear_vel[1] is the lateral (sideways) speed.
+
+        Orientation: the raw quaternion from Isaac Sim is unpacked as
+        [qw, qx, qy, qz] and converted to Euler angles (roll, pitch, yaw)
+        using quaternion_to_euler. Yaw is extracted as orientation[2].
 
         Returns:
-            state (dict): The state of the robot.
+            dict with keys:
+                "position" (np.ndarray): World-frame position [x, y, z] in
+                    metres, dtype float32.
+                "orientation" (np.ndarray): Euler angles [roll, pitch, yaw]
+                    in radians, dtype float32.
+                "linear_vel" (np.ndarray): Body-frame linear velocity
+                    [forward, lateral, vertical] in m/s, dtype float32.
+                "angular_vel" (np.ndarray): World-frame angular velocity
+                    [wx, wy, wz] in rad/s, dtype float32. wz is the yaw rate.
         """
-
-        position, orientation = self.robot.get_world_pose()
-        linear_vel = self.robot.get_linear_velocity()
+        position, orientation_quat = self.robot.get_world_pose()
+        linear_vel  = self.robot.get_linear_velocity()
         angular_vel = self.robot.get_angular_velocity()
 
-        qw, qx, qy, qz = orientation
-
-        yaw = math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
+        qw, qx, qy, qz = orientation_quat
+        roll, pitch, yaw = quaternion_to_euler(qx, qy, qz, qw, degrees=False)
+        orientation = [roll, pitch, yaw]
 
         vx, vy = linear_vel[0], linear_vel[1]
         forward_speed = vx * math.cos(yaw) + vy * math.sin(yaw)
+        lateral_speed = -vx * math.sin(yaw) + vy * math.cos(yaw)
+        linear_vel    = [forward_speed, lateral_speed, float(linear_vel[2])]
 
-        linear_vel = [forward_speed, 0.0, float(linear_vel[2])]
-
-        state = {
-            "position": np.array(position, dtype=np.float32),
+        return {
+            "position":    np.array(position,    dtype=np.float32),
             "orientation": np.array(orientation, dtype=np.float32),
-            "linear_vel": np.array(linear_vel, dtype=np.float32),
+            "linear_vel":  np.array(linear_vel,  dtype=np.float32),
             "angular_vel": np.array(angular_vel, dtype=np.float32),
-            "yaw": float(yaw)
         }
 
-        return state
-    
-    def teleport(self, position, yaw):
-        """The function that teleport the robot to a given position with a given yaw.
+    def teleport(self, position: np.ndarray, yaw: float) -> None:
+        """Instantly moves the robot to a given position and heading by
+        directly setting its USD world pose and zeroing all velocities.
+
+        The yaw angle is converted to a quaternion assuming zero roll and
+        pitch (the robot stays flat). Isaac Sim's quaternion convention for
+        this API is [qw, qx, qy, qz].
 
         Args:
-            position (tuple[float, float]): The position we want to give to the robot
-            yaw (float): The yaw angle we want to give to the robot
+            position (np.ndarray): Target position [x, y, z] in metres.
+                z=0.0 places the robot at ground level; use a higher value
+                (e.g. 0.5) and let physics settle if the exact resting height
+                is uncertain.
+            yaw (float): Target heading in radians, measured counter-clockwise
+                from the positive X axis. Roll and pitch are set to zero.
         """
-
-        # yaw = yaw*math.pi/180 if yaw in degrees, nothing else
-        
         qw = math.cos(yaw / 2.0)
         qz = math.sin(yaw / 2.0)
         orientation = np.array([qw, 0.0, 0.0, qz])
@@ -119,27 +173,52 @@ class Create3Robot:
         self.robot.set_world_pose(position=position, orientation=orientation)
         self.robot.set_linear_velocity(np.zeros(3))
         self.robot.set_angular_velocity(np.zeros(3))
-        
-class RobotController(BaseController):
 
-    def __init__(self):
-        """The Controller class for our differential robot.
-        """
-        super().__init__(name="robot_controller")
-        self._wheel_radius = WHEEL_RADIUS
-        self._wheel_base = WHEEL_DISTANCE
-        self._max_wheel_vel = MAX_LINEAR_SPEED / WHEEL_RADIUS
-    
-    def forward(self, command):
-        """The function that moves the robot given a command on the wheels.
+
+class RobotController(BaseController):
+    def __init__(
+            self,
+            wheel_radius: float,
+            wheel_base: float,
+            max_linear_speed: float
+    ):
+        """Differential drive controller that converts body-frame velocity
+        commands [v, w] into individual wheel angular velocity targets.
+
+        The kinematic model used is the standard differential drive:
+            left  = (2v - w * wheel_base) / (2 * wheel_radius)
+            right = (2v + w * wheel_base) / (2 * wheel_radius)
+
+        Both outputs are clamped to ±max_wheel_vel to respect the hardware
+        speed limit of the Create3.
 
         Args:
-            command (tuple[float, float]): The command for the wheels.
+            wheel_radius (float): Radius of each drive wheel in metres.
+            wheel_base (float): Distance between the two wheels (axle length)
+                in metres.
+            max_linear_speed (float): Maximum robot linear speed in m/s. Used
+                to derive the maximum allowable wheel angular velocity:
+                max_wheel_vel = max_linear_speed / wheel_radius.
+        """
+        super().__init__(name="robot_controller")
+        self._wheel_radius   = wheel_radius
+        self._wheel_base     = wheel_base
+        self._max_wheel_vel  = max_linear_speed / wheel_radius
+
+    def forward(self, command: list) -> ArticulationAction:
+        """Converts a [v, w] body-frame command to an ArticulationAction
+        containing individual wheel angular velocity targets.
+
+        Args:
+            command (list[float, float]): [linear_velocity_m_s,
+                angular_velocity_rad_s]. Positive v moves the robot forward,
+                positive w turns it counter-clockwise.
 
         Returns:
-            The order on the joints with the class ArticulationAction, given our command.
+            ArticulationAction: Joint velocity targets for the left and right
+                wheel joints, clamped to ±max_wheel_vel rad/s.
         """
-        v, w = command[0], command[1]
+        v, w  = command[0], command[1]
         left  = (2 * v - w * self._wheel_base) / (2 * self._wheel_radius)
         right = (2 * v + w * self._wheel_base) / (2 * self._wheel_radius)
 
