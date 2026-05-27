@@ -6,10 +6,15 @@ from stable_baselines3.common.callbacks import BaseCallback
 class PPOWandbCallback(BaseCallback):
 
     def __init__(self, verbose=0):
+        """A Callback class that sends the information of the training to wandb when using PPO
+
+        Args:
+            verbose (int, optional): A boolean deciding if information should be given. Defaults to 0.
+        """
 
         super().__init__(verbose)
 
-        self._episode_count = 0.0
+        self._episode_count = 0
         self._running_avg_reward = 0.0
         self._running_avg_steps = 0.0
         self._current_ep_step = 0
@@ -17,6 +22,8 @@ class PPOWandbCallback(BaseCallback):
         self._timestep = 0.0
     
     def _on_step(self):
+        """The function that sends all the information we need at each step of the training
+        """
 
         env = self._get_raw_env()
         action = self.locals["actions"][0]
@@ -56,6 +63,8 @@ class PPOWandbCallback(BaseCallback):
         return True
     
     def _on_rollout_end(self):
+        """The function that sends all the information we need at the end of a rollout
+        """
         
         logger_vals = self.model.logger.name_to_value
         wandb.log({
@@ -67,6 +76,11 @@ class PPOWandbCallback(BaseCallback):
         })
     
     def _get_raw_env(self):
+        """The function that allows to unwrap the environment
+
+        Returns:
+            env: The raw environment with no wrappers
+        """
         env = self.training_env
 
         if hasattr(env, "venv"):

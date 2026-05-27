@@ -11,16 +11,30 @@ from stable_baselines3.common.callbacks import BaseCallback
 from utils.utils import euler_to_quaternion, create_video
 
 class VideoCallback(BaseCallback):
+    """
+    
+    """
 
     def __init__(self,
-                 output_path,
-                 images_path,
-                 record_every_n_episodes=10_000,
-                 n_steps=150,
-                 fps=30,
-                 resolution=(1024, 1024),
-                 verbose=0 
+                 output_path: str,
+                 images_path: str,
+                 record_every_n_episodes: int =10_000,
+                 n_steps: int =150,
+                 fps: int =30,
+                 resolution: tuple[int, int] =(1024, 1024),
+                 verbose: int =0 
                 ):
+        """A callback Class that takes video during a PPO training to monitor it visually
+
+        Args:
+            output_path (str): The path to make the video
+            images_path (str): The path to store the images
+            record_every_n_episodes (int, optional): The number of epsiodes between each record. Defaults to 10_000.
+            n_steps (int, optional): The maximum number of steps of an episode. Defaults to 150.
+            fps (int, optional): The number of frames per seconds for the record. Defaults to 30.
+            resolution (tuple[int, int], optional): The resolution of the record. Defaults to (1024, 1024).
+            verbose (int, optional): A boolean deciding if information should be given. Defaults to 0.
+        """
         
         super().__init__(verbose)
 
@@ -34,6 +48,8 @@ class VideoCallback(BaseCallback):
         self._episode_count = 0
     
     def _on_training_start(self):
+        """The creation and initialization of the camera at the start of the training
+        """
         
         from isaacsim.sensors.camera import Camera
 
@@ -49,6 +65,9 @@ class VideoCallback(BaseCallback):
         print("[VideoCallback] Camera initialised.")
 
     def _on_step(self):
+        """A function that browses across the episodes and start the record when it's time 
+        (depending on the parameter record_every_n_episodes)
+        """
 
         done = self.locals["dones"][0]
 
@@ -60,6 +79,8 @@ class VideoCallback(BaseCallback):
         return True
     
     def _record_episode(self):
+        """The function that records the episode
+        """
         env = self._get_raw_env()
 
         obs = self.training_env.reset()
@@ -101,6 +122,11 @@ class VideoCallback(BaseCallback):
         print(f"Command to use to get the video : scp g.portron@10.163.11.19:{video_path} Téléchargements/")
     
     def _get_raw_env(self):
+        """The function that allows to unwrap the environment
+
+        Returns:
+            env: The raw environment with no wrappers
+        """
         env = self.training_env
 
         if hasattr(env, "venv"):
