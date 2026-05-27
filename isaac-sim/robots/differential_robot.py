@@ -19,15 +19,24 @@ class Create3Robot:
     def __init__(
             self,
             world,
-            prim_path="/World/create_3",
-            position=np.array([0.0, 0.0, 0.])
+            prim_path: str ="/World/create_3",
+            position: np.ndarray | None = None
     ):
+        """The class that creates the Create3Robot.
+
+        Args:
+            world (_type_): The world in which the robot will be.
+            prim_path (str, optional): The path to which the instance of the robot has to be created. Defaults to "/World/create_3".
+            position (np.ndarray | None, optional): The base position of the robot. Defaults to None.
+        """
         
         self.world = world
         self.prim_path = prim_path
         self.position = position
     
     def load(self):
+        """The function that loads the robot into the world.
+        """
 
         self.robot = WheeledRobot(
             prim_path=self.prim_path,
@@ -39,24 +48,36 @@ class Create3Robot:
             orientation=np.array([0.0, 0.0, 0.0, 1.0])
         )
 
-
         self.world.scene.add(self.robot)
     
     def initialize(self):
+        """The function that initializes the physic of the robot. It has to be called after the first reset of the world.
+        """
 
         self.robot.initialize()
-        # self.robot.enable_gravity()
         self.controller = RobotController()
     
     def apply_action(self, command):
+        """The function that give instruction for the robot to move.
+
+        Args:
+            command (tuple[float, float]): The command the robot has to follow to move.
+        """
 
         self.robot.apply_wheel_actions(self.controller.forward(command=command))
 
     def stop(self):
+        """The function that stops the robot.
+        """
 
         self.robot.apply_wheel_actions(self.controller.forward(command=[0.0, 0.0]))
     
     def get_state(self):
+        """The function that returns the state of the robot : its position, speeds, and yaw.
+
+        Returns:
+            state (dict): The state of the robot.
+        """
 
         position, orientation = self.robot.get_world_pose()
         linear_vel = self.robot.get_linear_velocity()
@@ -82,6 +103,12 @@ class Create3Robot:
         return state
     
     def teleport(self, position, yaw):
+        """The function that teleport the robot to a given position with a given yaw.
+
+        Args:
+            position (tuple[float, float]): The position we want to give to the robot
+            yaw (float): The yaw angle we want to give to the robot
+        """
 
         # yaw = yaw*math.pi/180 if yaw in degrees, nothing else
         
@@ -96,12 +123,22 @@ class Create3Robot:
 class RobotController(BaseController):
 
     def __init__(self):
+        """The Controller class for our differential robot.
+        """
         super().__init__(name="robot_controller")
         self._wheel_radius = WHEEL_RADIUS
         self._wheel_base = WHEEL_DISTANCE
         self._max_wheel_vel = MAX_LINEAR_SPEED / WHEEL_RADIUS
     
     def forward(self, command):
+        """The function that moves the robot given a command on the wheels.
+
+        Args:
+            command (tuple[float, float]): The command for the wheels.
+
+        Returns:
+            The order on the joints with the class ArticulationAction, given our command.
+        """
         v, w = command[0], command[1]
         left  = (2 * v - w * self._wheel_base) / (2 * self._wheel_radius)
         right = (2 * v + w * self._wheel_base) / (2 * self._wheel_radius)
