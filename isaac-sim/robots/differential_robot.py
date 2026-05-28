@@ -11,66 +11,80 @@ from utils.utils import quaternion_to_euler
 ASSETS_ROOT_PATH = get_assets_root_path()
 
 
-class Create3Robot:
+class DifferentialRobot:
     def __init__(
             self,
             world,
-            prim_path: str = "/World/create_3",
-            position: np.ndarray | None = None
+            name: str,
+            prim_path: str,
+            asset_path: str,
+            wheel_distance: float,
+            wheel_radius: float,
+            max_linear_speed: float,
     ):
-        """Wraps the iRobot Create3 USD asset and exposes a simple interface
-        for loading, controlling, and reading the state of the robot inside
-        Isaac Sim.
+        """Abstract base class for differential drive robots in Isaac Sim.
+        Provides generic load, initialize, control, state reading, and
+        teleport methods that work for any WheeledRobot USD asset with two
+        wheel joints.
 
-        The robot uses a differential drive kinematics model: a linear velocity
-        command v (m/s) and angular velocity command w (rad/s) are converted to
-        individual wheel angular velocities by the RobotController and sent to
-        the physics articulation.
+        Subclasses should call super().__init__() with the robot-specific
+        parameters and may override load() if the USD asset requires
+        non-standard constructor arguments.
 
         Args:
             world: The Isaac Sim World instance the robot will be added to.
-            prim_path (str): USD prim path at which the robot is created in the
-                stage. Must be unique if multiple robots are present.
-                Defaults to "/World/create_3".
-            position (np.ndarray | None): Initial spawn position as a 1D array
-                [x, y, z] in metres. If None the robot is placed at the origin.
-                Defaults to None.
+            name (str): Unique name for the robot prim within the world scene.
+            prim_path (str): USD prim path at which the robot is created in
+                the stage. Must be unique if multiple robots are present.
+            asset_path (str): Full path to the robot USD file, typically
+                constructed from the nucleus assets root path.
+            wheel_distance (float): Distance between the two drive wheels
+                (axle length) in metres. Used by RobotController for
+                differential drive kinematics.
+            wheel_radius (float): Radius of each drive wheel in metres. Used
+                by RobotController to convert linear speed to wheel angular
+                velocity.
+            max_linear_speed (float): Hardware-limited maximum forward speed
+                in m/s. Used to clamp wheel velocity commands and prevent
+                the robot from exceeding its physical limits.
 
         Attributes:
-            wheel_distance (float): Distance between the two drive wheels in
-                metres (axle length). Used by the controller for kinematics.
-            wheel_radius (float): Radius of each drive wheel in metres.
-            max_linear_speed (float): Hardware-limited maximum forward speed
-                in m/s, used to clamp wheel velocity commands.
-            asset_path (str): Full nucleus path to the Create3 USD file.
+            robot: The WheeledRobot articulation object, set by load().
+            controller (RobotController): The wheel velocity controller,
+                set by initialize().
         """
-        self.world      = world
-        self.prim_path  = prim_path
-        self.position   = position
+        self.world            = world
+        self.name             = name
+        self.prim_path        = prim_path
+        self.asset_path       = asset_path
+        self.wheel_distance   = wheel_distance
+        self.wheel_radius     = wheel_radius
+        self.max_linear_speed = max_linear_speed
 
-        self.wheel_distance    = 0.233
-        self.wheel_radius      = 0.03575
-        self.max_linear_speed  = 0.22
-
-        self.asset_path = ASSETS_ROOT_PATH + "/Isaac/Robots/iRobot/Create3/create_3.usd"
+        self.robot = None
 
     def load(self) -> None:
-        """Instantiates the Create3 WheeledRobot from the USD asset and adds
-        it to the world scene. Must be called before world.reset() and
+        """Instantiates the WheeledRobot from the USD asset and adds it to
+        the world scene. Must be called before world.reset() and
         robot.initialize().
 
-        The robot is spawned with a neutral orientation (quaternion [w=1, x=0,
-        y=0, z=0] — identity). Use teleport() after initialize() to set a
-        different starting pose.
+        The robot is spawned at the origin with a neutral orientation
+        (quaternion [w=1, x=0, y=0, z=0] — identity). Use teleport() after
+        initialize() to set a different starting pose.
+
+        Note:
+            Subclasses that need a specific spawn position, orientation, or
+            non-standard constructor arguments (e.g. usd_path vs asset_path)
+            should override this method.
         """
         self.robot = WheeledRobot(
-            prim_path      = self.prim_path,
-            name           = "create_3",
-            wheel_dof_names= ["left_wheel_joint", "right_wheel_joint"],
-            usd_path       = self.asset_path,
-            create_robot   = True,
-            position       = self.position,
-            orientation    = np.array([0.0, 0.0, 0.0, 1.0]),
+            prim_path       = self.prim_path,
+            name            = self.name,
+            wheel_dof_names = ["left_wheel_joint", "right_wheel_joint"],
+            asset_path      = self.asset_path,
+            create_robot    = True,
+            position        = np.array([0.0, 0.0, 0.0]),
+            orientation     = np.array([0.0, 0.0, 0.0, 1.0]),
         )
         self.world.scene.add(self.robot)
 
@@ -99,9 +113,9 @@ class Create3Robot:
         self.robot.apply_wheel_actions(self.controller.forward(command=command))
 
     def stop(self) -> None:
-        """Sends a zero-velocity command to both wheels, bringing the robot to
-        a stop. Useful at the start of each episode after teleporting to clear
-        any residual velocity from the previous episode.
+        """Sends a zero-velocity command to both wheels, bringing the robot
+        to a stop. Useful at the start of each episode after teleporting to
+        clear any residual velocity from the previous episode.
         """
         self.robot.apply_wheel_actions(self.controller.forward(command=[0.0, 0.0]))
 
@@ -175,12 +189,73 @@ class Create3Robot:
         self.robot.set_angular_velocity(np.zeros(3))
 
 
+class Create3Robot(DifferentialRobot):
+    # Create3-specific physical constants
+    _WHEEL_DISTANCE   = 0.233
+    _WHEEL_RADIUS     = 0.03575
+    _MAX_LINEAR_SPEED = 0.22
+
+    def __init__(
+            self,
+            world,
+            prim_path: str = "/World/create_3",
+            position: np.ndarray | None = None,
+    ):
+        """Concrete differential robot implementation for the iRobot Create3.
+
+        Inherits all control, state reading, and teleport logic from
+        DifferentialRobot and only overrides load() to pass the Create3-
+        specific USD path and spawn position.
+
+        Args:
+            world: The Isaac Sim World instance the robot will be added to.
+            prim_path (str): USD prim path for this robot instance. Defaults
+                to "/World/create_3".
+            position (np.ndarray | None): Initial spawn position [x, y, z]
+                in metres. If None the robot is placed at the origin and
+                teleport() should be called after initialize() to set the
+                actual starting pose. Defaults to None.
+        """
+        super().__init__(
+            world            = world,
+            name             = "create_3",
+            prim_path        = prim_path,
+            asset_path       = ASSETS_ROOT_PATH + "/Isaac/Robots/iRobot/Create3/create_3.usd",
+            wheel_distance   = self._WHEEL_DISTANCE,
+            wheel_radius     = self._WHEEL_RADIUS,
+            max_linear_speed = self._MAX_LINEAR_SPEED,
+        )
+        self.position = position
+
+    def load(self) -> None:
+        """Instantiates the Create3 WheeledRobot from the nucleus USD asset
+        and adds it to the world scene.
+
+        Overrides DifferentialRobot.load() because the Create3 USD is loaded
+        via the usd_path keyword (fetched from the nucleus server) rather than
+        asset_path, and because the spawn position is configurable at
+        construction time rather than always at the origin.
+
+        Must be called before world.reset() and robot.initialize().
+        """
+        self.robot = WheeledRobot(
+            prim_path       = self.prim_path,
+            name            = self.name,
+            wheel_dof_names = ["left_wheel_joint", "right_wheel_joint"],
+            usd_path        = self.asset_path,   # nucleus path, not local file
+            create_robot    = True,
+            position        = self.position,
+            orientation     = np.array([0.0, 0.0, 0.0, 1.0]),
+        )
+        self.world.scene.add(self.robot)
+
+
 class RobotController(BaseController):
     def __init__(
             self,
             wheel_radius: float,
             wheel_base: float,
-            max_linear_speed: float
+            max_linear_speed: float,
     ):
         """Differential drive controller that converts body-frame velocity
         commands [v, w] into individual wheel angular velocity targets.
@@ -190,7 +265,7 @@ class RobotController(BaseController):
             right = (2v + w * wheel_base) / (2 * wheel_radius)
 
         Both outputs are clamped to ±max_wheel_vel to respect the hardware
-        speed limit of the Create3.
+        speed limit of the robot.
 
         Args:
             wheel_radius (float): Radius of each drive wheel in metres.
@@ -201,9 +276,9 @@ class RobotController(BaseController):
                 max_wheel_vel = max_linear_speed / wheel_radius.
         """
         super().__init__(name="robot_controller")
-        self._wheel_radius   = wheel_radius
-        self._wheel_base     = wheel_base
-        self._max_wheel_vel  = max_linear_speed / wheel_radius
+        self._wheel_radius  = wheel_radius
+        self._wheel_base    = wheel_base
+        self._max_wheel_vel = max_linear_speed / wheel_radius
 
     def forward(self, command: list) -> ArticulationAction:
         """Converts a [v, w] body-frame command to an ArticulationAction
