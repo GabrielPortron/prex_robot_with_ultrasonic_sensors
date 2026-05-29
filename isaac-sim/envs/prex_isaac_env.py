@@ -46,6 +46,12 @@ class State:
                 vector components (cos_yaw, sin_yaw, delta) as a 3-tuple, or
                 None to exclude the heading vector entirely.
                 Example: (1.0, 1.0, 100.0)
+            controller (int | None): Maximum absolute value for the controller
+                flag dimension, or None to exclude it from the state vector.
+                When not None, a single dimension is appended at the end of the
+                state vector encoding whether the obstacle avoidance controller
+                was active on the current step (0 = inactive, 1 = active).
+                Example: 1
             
         Attributes:
             nb_sensors (int): Number of active sensor dimensions, counted during
@@ -75,12 +81,13 @@ class State:
         vector from the configuration passed to __init__.
 
         Iterates over each field in declaration order (sensors → position →
-        orientation → linear_speed → angular_speed → heading_vec). Components
-        whose value is None are skipped. All included components are assumed
-        symmetric around zero, so bounds are set to [-value, +value].
+        orientation → linear_speed → angular_speed → heading_vec → controller).
+        Components whose value is None are skipped. All included components are 
+        assumed symmetric around zero, so bounds are set to [-value, +value].
 
         The heading_vec field is treated as a 3-element group
         (cos_yaw, sin_yaw, delta) and adds 3 dimensions at once.
+        The controller field adds a single dimension if not None.
 
         After this call the following attributes are available:
             observation_space (gymnasium.spaces.Box): The observation space.
@@ -172,6 +179,9 @@ class State:
                 array if multiple angular velocity components are included.
             heading_vec (np.ndarray): Concatenated heading vector and angular
                 error [cos_yaw, sin_yaw, delta], shape (3,).
+            controller (np.ndarray): Binary flag indicating whether the obstacle
+                avoidance controller was active on this step, shape (1,).
+                Value is 1 if the controller overrode the action, 0 otherwise.
         """
         new_state = np.concatenate([sensors,
                                     position,
@@ -214,8 +224,8 @@ class PrexIsaacEnv(gym.Env):
             rendering_dt: float = 1.0,
             verbose: bool = False,
             ppo: bool = False,
-            cube: bool = False,
-            sensors: bool = False,
+            cube: int = 0,
+            arena: bool = False,
             repeating_action: int = 1,
             device: str = "cuda",
             seed: int = None,
@@ -251,12 +261,13 @@ class PrexIsaacEnv(gym.Env):
                 stdout. Defaults to False.
             ppo (bool): If True, uses the PPO reward formulation instead of
                 the SAC one. Defaults to False.
-            cube (bool): If True, spawns a cube obstacle in the arena that is
-                repositioned at the start of each episode. Mutually exclusive
-                with sensors=True. Stored as self.has_cube to avoid overwriting
-                the self.cube object created in launch(). Defaults to False.
-            sensors (bool): If True, enables the four analytic ultrasonic
-                sensors. Mutually exclusive with cube=True. Defaults to False.
+            cube (int): Number of cube obstacles to spawn in the arena. Each
+                cube is repositioned at the start of every episode. Set to 0
+                for no obstacles. Stored as self.nb_cube. Defaults to 0.
+            arena (bool): If True, builds rectangular arena walls around the
+                training area. If False, only a ground plane is created and
+                self.perimeter is set to a large default value (5.0 x 5.0 m)
+                to allow open-world training. Defaults to False.
             repeating_action (int): Number of physics steps to simulate per
                 call to step(). Higher values give the robot more time to
                 respond to each action command. Defaults to 1.
@@ -290,8 +301,8 @@ class PrexIsaacEnv(gym.Env):
         self.rendering_dt       = rendering_dt
         self.verbose            = verbose
         self.ppo                = ppo
-        self.has_cube               = cube
-        self.has_sensors        = sensors
+        self.nb_cube            = cube
+        self.has_arena          = arena
         self.repeating_action   = repeating_action
         self.device             = device
         self.seed               = seed
@@ -309,7 +320,7 @@ class PrexIsaacEnv(gym.Env):
         self.state = State(
             sensors={
                 "front": 4.0, "back": 4.0,
-                "left":  4.0, "right": 4.0,
+                "left":  None, "right": None,
             },
             position={
                 "x": 2.0, "y": 2.0, "z": 2.0,
@@ -329,9 +340,6 @@ class PrexIsaacEnv(gym.Env):
         self.state.init_spaces()
         self.observation_space = self.state.get_observation_space()
 
-        self.perimeter       = arena_geometry[0]
-        self.depth           = arena_geometry[1]
-        self.heigth          = arena_geometry[2]
         self.goal            = np.zeros(2,  dtype=np.float32)
         self.dist            = 0.0
         self.theta           = 0.0
@@ -348,6 +356,13 @@ class PrexIsaacEnv(gym.Env):
         self.heading_vec     = np.zeros(2,  dtype=np.float32)
         self.last_action     = np.zeros(2,  dtype=np.float32)
 
+        if self.has_arena:
+            self.perimeter       = arena_geometry[0]
+            self.depth           = arena_geometry[1]
+            self.heigth          = arena_geometry[2]
+        else:
+            self.perimeter = np.array([5.0, 5.0])
+
         self.world   = None
         self.arena   = None
         self.robot   = None
@@ -355,9 +370,6 @@ class PrexIsaacEnv(gym.Env):
         self.cube    = None
 
         self.needed_control = False
-
-        assert not (self.has_cube and self.has_sensors), \
-            "cube and sensors are mutually exclusive — enable only one."
 
         self.launch()
 
@@ -369,9 +381,11 @@ class PrexIsaacEnv(gym.Env):
         Steps performed:
             1. Start SimulationApp (headless).
             2. Import Isaac Sim API (must happen after SimulationApp starts).
-            3. Create the World.
-            4. Build the arena walls.
-            5. Optionally spawn the cube obstacle.
+            3. Create the World and add a default ground plane.
+            4. Optionally build arena walls (only if has_arena=True).
+            5. Instantiate the Cube manager and create nb_cube cubes at the
+            origin. If nb_cube=0 no visible cubes are added to the scene
+            but the manager object is still created.
             6. Load the Create3 robot.
             7. Initialise the analytic ultrasonic sensors.
             8. Run world.reset() and robot.initialize() to start physics.
@@ -389,25 +403,28 @@ class PrexIsaacEnv(gym.Env):
         from envs.isaacsim_elements.arena import Arena
         from robots.differential_robot import Create3Robot
         from envs.isaacsim_elements.sensors import UltrasonicSensors
+        from envs.isaacsim_elements.cube import Cube
 
         self.world = World()
+                
+        self.world.scene.add_default_ground_plane()
 
-        self.arena = Arena(
-            world=self.world,
-            perimeter=self.perimeter,
-            depth=self.depth,
-            height=self.heigth,
-        )
-        self.arena.build()
-
-        if self.has_cube:
-            from envs.isaacsim_elements.cube import Cube
-            self.cube = Cube(
+        if self.has_arena:
+            self.arena = Arena(
                 world=self.world,
-                scale=(0.3, 0.3, 0.3),
                 perimeter=self.perimeter,
+                depth=self.depth,
+                height=self.heigth,
             )
-            self.cube.create_cube()
+            self.arena.build()
+ 
+        self.cube = Cube(
+            world=self.world,
+            nb_cube=self.nb_cube,
+            scale=(0.3, 0.3, 0.3),
+            perimeter=self.perimeter,
+        )
+        self.cube.create_cubes()
 
         self.robot = Create3Robot(world=self.world)
         self.robot.load()
@@ -457,6 +474,10 @@ class PrexIsaacEnv(gym.Env):
         counter, clears episode info, respawns the robot at a random position,
         optionally repositions the cube obstacle, and reads the initial state.
 
+        After spawning the robot, all cube obstacles are repositioned by
+        set_up_all_cubes(), which places each cube at a random location that
+        avoids the goal area, the robot, and all previously placed cubes.
+
         Args:
             seed (int | None): Random seed forwarded to the Gymnasium base
                 class for reproducibility. Defaults to None.
@@ -481,12 +502,11 @@ class PrexIsaacEnv(gym.Env):
         self.read_state()
         self.prev_dist = self.dist
 
-        if self.has_cube:
-            self.cube.teleport_cube(
-                target_radius=self.radius_target,
-                robot_position=self.position[:2],
-                robot_size=0.4,
-            )
+        self.cube.set_up_all_cubes(
+            target_radius=self.radius_target,
+            robot_position=self.position[:2],
+            robot_size=0.4,
+        )
 
         return self.state.get_state().copy(), self.info
 
@@ -558,16 +578,13 @@ class PrexIsaacEnv(gym.Env):
 
         The state vector is assembled in this order, matching the State
         declaration in __init__:
-            [d_front,                ← front sensor distance only
-            x, y, z,               ← position
-            yaw,                   ← orientation (yaw only)
-            vx,                    ← forward linear speed
-            wz,                    ← yaw rate
-            cos_yaw, sin_yaw, delta] ← heading vector + angle error
-
-        delta is the angle between the robot's heading vector and the vector
-        pointing from the robot toward the goal (origin). It is zero when the
-        robot faces directly toward the goal and π when facing directly away.
+            [d_front, d_back,            ← front and back sensor distances
+            x, y, z,                   ← position
+            yaw,                       ← orientation (yaw only)
+            vx,                        ← forward linear speed
+            wz,                        ← yaw rate
+            cos_yaw, sin_yaw, delta,   ← heading vector + angle error
+            controller_flag]           ← 1 if controller was active, else 0
 
         Updates:
             self.position, self.orientation, self.theta, self.linear_speed,
@@ -575,9 +592,11 @@ class PrexIsaacEnv(gym.Env):
             the internal State vector via State.update_state().
 
         Note:
-            The variables front_and_back and full_sensors are computed but
-            front_and_back is currently unused. It is kept as a reference for
-            when additional sensors are re-enabled in the State configuration.
+            full_sensors computes all four distances but only the first two
+            (front and back) are passed to update_state(), matching the State
+            configuration. The variable front (shape (1,)) is computed but
+            unused — it is a leftover from the single-sensor configuration
+            and can be removed.
         """
         robot_state = self.robot.get_state()
 
@@ -607,7 +626,7 @@ class PrexIsaacEnv(gym.Env):
 
         controller = np.array([int(self.needed_control)])
 
-        self.state.update_state(sensors=full_sensors,
+        self.state.update_state(sensors=front_and_back,
                                 position=self.position,
                                 orientation=np.array([self.theta]),
                                 linear_speed=np.array([self.linear_speed]),

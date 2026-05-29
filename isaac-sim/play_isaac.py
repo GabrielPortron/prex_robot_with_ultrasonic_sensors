@@ -29,6 +29,8 @@ parser.add_argument("--cube", action="store_true",
                     help="Spawns a cube for the training")
 parser.add_argument("--ppo", action="store_true",
                     help="Change the algorithm from SAC to PPO")
+parser.add_argument("--arena", action="store_true",
+                    help="The training will take place in 2.0x2.0 m2 arena")
 parser.add_argument("--model",    type=str, required=True,
                     help="Path to the saved model zip (without .zip extension)")
 parser.add_argument("--weight",    type=int, required=True,
@@ -39,9 +41,6 @@ RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODELS_DIR = os.path.join("models", RUN_NAME)
 LOGS_DIR = os.path.join("logs", RUN_NAME)
 
-os.makedirs(MODELS_DIR, exist_ok=True)
-os.makedirs(LOGS_DIR, exist_ok=True)
-
 file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of the path
 args = parse_arguments_from_ini(file_config_path)
 last_mod_time = os.path.getmtime(file_config_path)
@@ -50,30 +49,6 @@ device = "cuda"
 
 model_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/" + args_main.model + f"/prex_ultrasonic_robot_policy_{args_main.weight}_weights.pth"
 
-# --- 2 - Setting up Camera ----------------------------------------------
-print("[Playing] I - Setting up Camera...")
-
-from isaacsim.sensors.camera import Camera
-
-camera = Camera(
-    prim_path="/World/camera",
-    position=np.array([0.0, 0.0, 5.0]),
-    orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
-    frequency=15,
-    resolution=(1024, 1024)
-)
-
-camera.initialize()
-camera.add_motion_vectors_to_frame()
-
-print("[Playing] ... camera set up")
-
-output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
-os.makedirs(output_path, exist_ok=True)
-
-images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
-os.makedirs(images_path, exist_ok=True)
-
 
 ### --- PPO --- ###
 if args_main.ppo:
@@ -81,8 +56,8 @@ if args_main.ppo:
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-    # --- 3 - Creating environment --------------------------------------------
-    print("[Playing] II - Creating environment...")
+    # --- 2 - Creating environment --------------------------------------------
+    print("[Playing] I - Creating environment...")
 
     env = PrexIsaacEnv(
         max_episode_length=args["max_steps"],
@@ -94,13 +69,37 @@ if args_main.ppo:
         verbose=args["verbose"],
         ppo=True,
         cube=args_main.cube,
-        sensors=False,
+        arena=False,
         repeating_action=args["repeating_action"],
         device=device,
         arena_geometry=[(2.0, 2.0), 0.2, 0.5],
     )
 
     print("[Playing] ... Environment created")
+
+    # --- 3 - Setting up Camera ----------------------------------------------
+    print("[Playing] II - Setting up Camera...")
+
+    from isaacsim.sensors.camera import Camera
+
+    camera = Camera(
+        prim_path="/World/camera",
+        position=np.array([0.0, 0.0, 5.0]),
+        orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
+        frequency=15,
+        resolution=(1024, 1024)
+    )
+
+    camera.initialize()
+    camera.add_motion_vectors_to_frame()
+
+    print("[Playing] ... camera set up")
+
+    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
+    os.makedirs(output_path, exist_ok=True)
+
+    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
+    os.makedirs(images_path, exist_ok=True)
 
     # --- 4 - Wrap environment ----------------------------------------------
     print("[Playing] III - Wrapping environment...")
@@ -163,7 +162,7 @@ if args_main.ppo:
 
 ### --- SAC --- ###
 else:
-    # --- 3 - Creating environment --------------------------------------------
+    # --- 2 - Creating environment --------------------------------------------
     print("[Playing] I - Creating environment...")
 
     env = PrexIsaacEnv(
@@ -176,13 +175,37 @@ else:
         verbose=args["verbose"],
         ppo=False,
         cube=args_main.cube,
-        sensors=False,
+        arena=False,
         repeating_action=args["repeating_action"],
         device=device,
         arena_geometry=[(2.0, 2.0), 0.2, 0.5],
     )
 
     print("[Playing] ... Environment created")
+
+    # --- 3 - Setting up Camera ----------------------------------------------
+    print("[Playing] II - Setting up Camera...")
+
+    from isaacsim.sensors.camera import Camera
+
+    camera = Camera(
+        prim_path="/World/camera",
+        position=np.array([0.0, 0.0, 5.0]),
+        orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
+        frequency=15,
+        resolution=(1024, 1024)
+    )
+
+    camera.initialize()
+    camera.add_motion_vectors_to_frame()
+
+    print("[Playing] ... camera set up")
+
+    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
+    os.makedirs(output_path, exist_ok=True)
+
+    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
+    os.makedirs(images_path, exist_ok=True)
 
     # --- 4 - Creating replay buffer ------------------------------------------
     print("[Playing] III - Creating replay buffer...")
@@ -264,7 +287,8 @@ else:
             camera.get_current_frame()
             rgb_image = camera.get_rgb()
             image = Image.fromarray(rgb_image)
-            save_path = f"{images_path}/ep{eps}_rgb_image_{step}.png"
+            img_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_path = f"{images_path}/ep{eps}_rgb_image_{img_timestamp}.png"
             image.save(save_path)
 
             step += 1

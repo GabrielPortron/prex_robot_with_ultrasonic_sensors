@@ -22,8 +22,10 @@ from envs.prex_isaac_env import PrexIsaacEnv
 parser = argparse.ArgumentParser()
 parser.add_argument("--no-wandb", action="store_true",
                     help="Disable Weights & Biases logging")
-parser.add_argument("--cube", action="store_true",
-                    help="Spawns a cube for the training")
+parser.add_argument("--cube", type=int, required=True,
+                    help="Enter the number of cube you want to spawn for the training")
+parser.add_argument("--arena", action="store_true",
+                    help="The training will take place in 2.0x2.0 m2 arena")
 parser.add_argument("--ppo", action="store_true",
                     help="Change the training algorithm from SAC to PPO")
 args_main = parser.parse_args()
@@ -43,8 +45,10 @@ last_mod_time = os.path.getmtime(file_config_path)
 
 # Uncomment below when debugging
 # args_main.no_wandb = True 
+# args_main.cube = 1
+# args_main.arena = True  
 
-TOTAL_TIMESTEPS = 4_000_000
+TOTAL_TIMESTEPS = 5_000_000
 CHECKPOINT_FREQ = 100_000
 
 device = "cuda"
@@ -95,7 +99,7 @@ if args_main.ppo:
         verbose=args["verbose"],
         ppo=True,
         cube=args_main.cube,
-        sensors=False,
+        arena=False,
         repeating_action=args["repeating_action"],
         device=device,
         arena_geometry=[(2.0, 2.0), 0.2, 0.5],
@@ -193,7 +197,7 @@ else:
         verbose=args["verbose"],
         ppo=False,
         cube=args_main.cube,
-        sensors=False,
+        arena=args_main.arena,
         repeating_action=args["repeating_action"],
         device=device,
         arena_geometry=[(2.0, 2.0), 0.2, 0.5],

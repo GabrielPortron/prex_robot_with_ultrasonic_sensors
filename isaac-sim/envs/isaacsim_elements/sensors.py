@@ -9,7 +9,7 @@ SENSOR_YAWS = {
 }
 
 SENSOR_MIN_RANGE = 0.30
-SENSOR_MAX_RANGE = 100.0
+SENSOR_MAX_RANGE = 10.0
 
 class UltrasonicSensors:
     def __init__(

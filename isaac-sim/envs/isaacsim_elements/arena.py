@@ -54,8 +54,6 @@ class Arena:
         """The function that builds the entire arena and sets the ground in the world.
         """
         
-        self.world.scene.add_default_ground_plane()
-
         self.create_wall(
             name="North",
             position=np.array([0.0, self.offset_length, self.height / 2]),
