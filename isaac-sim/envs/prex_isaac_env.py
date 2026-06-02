@@ -319,8 +319,8 @@ class PrexIsaacEnv(gym.Env):
 
         self.state = State(
             sensors={
-                "front": 4.0, "back": 4.0,
-                "left":  None, "right": None,
+                "front": 20.0, "back": 20.0,
+                "left":  20.0, "right": 20.0,
             },
             position={
                 "x": 2.0, "y": 2.0, "z": 2.0,
@@ -370,6 +370,7 @@ class PrexIsaacEnv(gym.Env):
         self.cube    = None
 
         self.needed_control = False
+        self.controlled_speed = 0.0
 
         self.launch()
 
@@ -402,7 +403,9 @@ class PrexIsaacEnv(gym.Env):
         from isaacsim.core.api import World
         from envs.isaacsim_elements.arena import Arena
         from robots.differential_robot import Create3Robot
-        from envs.isaacsim_elements.sensors import UltrasonicSensors
+        from robots.sensors.ultrasonic_sensors import UltrasonicSensors
+        # from envs.isaacsim_elements.sensors import UltrasonicSensors
+        # from envs.isaacsim_elements.physx_sensors import UltrasonicPhysXSensors
         from envs.isaacsim_elements.cube import Cube
 
         self.world = World()
@@ -426,10 +429,10 @@ class PrexIsaacEnv(gym.Env):
         )
         self.cube.create_cubes()
 
-        self.robot = Create3Robot(world=self.world)
+        self.robot = Create3Robot(world=self.world, prim_path="/World/create_3")
         self.robot.load()
 
-        self.sensors = UltrasonicSensors(perimeter=self.perimeter)
+        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors)
 
         self.world.reset()
         self.robot.initialize()
@@ -620,13 +623,13 @@ class PrexIsaacEnv(gym.Env):
         else:
             self.delta = 0.0
 
-        full_sensors = self.sensors.get_distances(position, yaw)
+        full_sensors = self.sensors.get_distances(self.position, self.theta)
         front = np.array([full_sensors[0]])
         front_and_back = full_sensors[:2]
 
         controller = np.array([int(self.needed_control)])
 
-        self.state.update_state(sensors=front_and_back,
+        self.state.update_state(sensors=full_sensors,
                                 position=self.position,
                                 orientation=np.array([self.theta]),
                                 linear_speed=np.array([self.linear_speed]),
@@ -689,7 +692,7 @@ class PrexIsaacEnv(gym.Env):
         #     reward -= 0.05
 
         if self.needed_control:
-            reward -= 0.05
+            reward -= 5.0 * self.controlled_speed
             self.needed_control = False
 
         if self.step_counter >= self.max_episode_length:
@@ -709,7 +712,7 @@ class PrexIsaacEnv(gym.Env):
 
         return reward, terminated, truncated
 
-    def controller(self, action: np.ndarray, noDetectionDist: float = 0.50) -> np.ndarray:
+    def controller(self, action: np.ndarray, noDetectionDist: float = 0.40) -> np.ndarray:
         """Obstacle avoidance safety controller that overrides the linear
         velocity component of the action when a sensor detects an obstacle
         within the detection threshold.
@@ -759,6 +762,7 @@ class PrexIsaacEnv(gym.Env):
                 if self.verbose:
                     print("Obstacle detected, controller activated")
                 self.needed_control = True
+                self.controlled_speed = lin_vel
                 return controlled_action
             else:
                 return action
@@ -768,6 +772,7 @@ class PrexIsaacEnv(gym.Env):
                 if self.verbose:
                     print("Obstacle detected, controller activated")
                 self.needed_control = True
+                self.controlled_speed = lin_vel
                 return controlled_action
             else:
                 return action
