@@ -148,8 +148,7 @@ class DifferentialRobot:
         linear_vel  = self.robot.get_linear_velocity()
         angular_vel = self.robot.get_angular_velocity()
 
-        qw, qx, qy, qz = orientation_quat
-        roll, pitch, yaw = quaternion_to_euler(qx, qy, qz, qw, degrees=False)
+        roll, pitch, yaw = quaternion_to_euler(orientation_quat, degrees=False, inverted=True)
         orientation = [roll, pitch, yaw]
 
         vx, vy = linear_vel[0], linear_vel[1]
