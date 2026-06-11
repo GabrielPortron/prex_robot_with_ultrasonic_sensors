@@ -1,7 +1,12 @@
 *__pycache__*
-model
+models
 wandb
 test
+logs
 results*.txt
 *.csv
 *.out
+*.pth
+*.zip
+*.mp4
+*.pkl
