@@ -225,11 +225,12 @@ class PrexIsaacEnv(gym.Env):
             verbose: bool = False,
             ppo: bool = False,
             cube: int = 0,
+            borderless_perimeter: list = (5.0, 5.0),
+            arena_geometry: list = [(2.0, 2.0), 0.2, 0.5],
             arena: bool = False,
             repeating_action: int = 1,
             device: str = "cuda",
             seed: int = None,
-            arena_geometry: list = [(2.0, 2.0), 0.2, 0.5],
     ):
         """Gymnasium-compatible RL environment for the Create3 robot navigating
         a rectangular arena in Isaac Sim. Supports both SAC (custom) and PPO
@@ -302,6 +303,7 @@ class PrexIsaacEnv(gym.Env):
         self.verbose            = verbose
         self.ppo                = ppo
         self.nb_cube            = cube
+        self.borderless_perimeter = borderless_perimeter
         self.has_arena          = arena
         self.repeating_action   = repeating_action
         self.device             = device
@@ -364,7 +366,7 @@ class PrexIsaacEnv(gym.Env):
             self.depth           = arena_geometry[1]
             self.heigth          = arena_geometry[2]
         else:
-            self.perimeter = np.array([5.0, 5.0])
+            self.perimeter = np.array(self.borderless_perimeter)
 
         if self.rendering_dt < 1.0:
             self.rend = True
