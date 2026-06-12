@@ -41,8 +41,7 @@ class Cube:
                 create_cubes().
         """
         self.world = world
-        self.scale = dimension
-        self.size = self.scale[2]
+        self.size = dimension
 
         self.perimeter = perimeter
         self.length, self.width = self.perimeter
@@ -73,7 +72,7 @@ class Cube:
                     name=name,
                     position=np.array([0.0, 0.0, 0.0]),
                     orientation=np.array([1.0, 0.0, 0.0, 0.0]),
-                    scale=np.array([self.scale, self.scale, self.scale])
+                    scale=np.array([self.size, self.size, self.size])
                 )
 
             self.world.scene.add(cube)
