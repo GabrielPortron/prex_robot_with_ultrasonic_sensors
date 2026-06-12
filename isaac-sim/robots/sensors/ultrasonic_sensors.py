@@ -12,7 +12,9 @@ class UltrasonicSensors:
             self,
             nb_sensors: int = 4,
             sensor_height: float = 0.2,
-            lateral_sensors_angle: int = 180
+            lateral_sensors_angle: int = 180,
+            sensor_cone_angle=15,
+            sensor_nb_rays=5
     ):
         """Simulates directional ultrasonic sensors using Isaac Sim PhysX
         raycasting. Rays are cast horizontally from the robot's position
@@ -58,6 +60,8 @@ class UltrasonicSensors:
         self.nb_sensors    = nb_sensors
         self.sensor_height = sensor_height
         self.lat_angle           = math.radians(lateral_sensors_angle)
+        self.cone_angle = sensor_cone_angle
+        self.nb_rays = sensor_nb_rays
 
         if self.nb_sensors == 0:
             self.sensor_dirs = {}
@@ -149,8 +153,6 @@ class UltrasonicSensors:
             self,
             origin: np.ndarray,
             yaw: float,
-            cone_angle: float = 15.0,
-            n_rays: int = 5,
     ) -> None:
         """Draws the sensor cone rays into the Isaac Sim viewport by writing
         line segments into the USD BasisCurves prim created by initialize().
@@ -186,7 +188,7 @@ class UltrasonicSensors:
         rot      = np.array([[c, -s, 0],
                               [s,  c, 0],
                               [0,  0, 1]])
-        cone_rad = math.radians(cone_angle)
+        cone_rad = math.radians(self.cone_angle)
 
         points = []
         counts = []
@@ -197,7 +199,7 @@ class UltrasonicSensors:
             world_dir  /= (np.linalg.norm(world_dir) + 1e-8)
             central_yaw = math.atan2(world_dir[1], world_dir[0])
 
-            for offset in np.linspace(-cone_rad / 2, cone_rad / 2, n_rays):
+            for offset in np.linspace(-cone_rad / 2, cone_rad / 2, self.nb_rays):
                 ray_yaw = central_yaw + offset
                 ray_dir = np.array([math.cos(ray_yaw), math.sin(ray_yaw), 0.0])
 
@@ -250,8 +252,6 @@ class UltrasonicSensors:
             self,
             origin: np.ndarray,
             central_dir: np.ndarray,
-            cone_angle: float = 15.0,
-            n_rays: int = 5,
     ) -> float:
         """Approximates an ultrasonic cone sensor by casting n_rays spread
         evenly across a horizontal fan of cone_angle degrees centred on
@@ -275,10 +275,10 @@ class UltrasonicSensors:
                 [SENSOR_MIN_RANGE, SENSOR_MAX_RANGE].
         """
         min_dist    = SENSOR_MAX_RANGE
-        cone_rad    = math.radians(cone_angle)
+        cone_rad    = math.radians(self.cone_angle)
         central_yaw = math.atan2(central_dir[1], central_dir[0])
 
-        for offset in np.linspace(-cone_rad / 2, cone_rad / 2, n_rays):
+        for offset in np.linspace(-cone_rad / 2, cone_rad / 2, self.nb_rays):
             yaw     = central_yaw + offset
             ray_dir = np.array([math.cos(yaw), math.sin(yaw), 0.0])
             dist    = self._single_raycast(origin, ray_dir)

@@ -440,7 +440,7 @@ class PrexIsaacEnv(gym.Env):
  
         self.cubes = Cube(
             world=self.world,
-            scale=(self.cube_dimension, self.cube_dimension, 0.3),
+            dimension=self.cube_dimension,
             perimeter=self.perimeter,
         )
         self.cubes.create_cubes(nb_cubes=self.nb_cube)
@@ -448,7 +448,10 @@ class PrexIsaacEnv(gym.Env):
         self.robot = Create3Robot(world=self.world, prim_path="/World/create_3")
         self.robot.load()
 
-        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, lateral_sensors_angle=180)
+        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, 
+                                         lateral_sensors_angle=180,
+                                         sensor_cone_angle=15,
+                                         sensor_nb_rays=5)
 
         self.world.reset()
         self.robot.initialize()
