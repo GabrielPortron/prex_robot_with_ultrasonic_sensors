@@ -35,12 +35,9 @@ parser.add_argument("--nb_episodes",    type=int, required=True,
 args_main = parser.parse_args()
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
-MODELS_DIR = os.path.join("models", RUN_NAME)
-LOGS_DIR = os.path.join("logs", RUN_NAME)
 
 file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of the path
 args = parse_arguments_from_ini(file_config_path)
-last_mod_time = os.path.getmtime(file_config_path)
 
 device = "cuda"
 
@@ -135,7 +132,6 @@ if args_main.ppo:
         obs = env.reset()
         
         tot_episodes += 1
-        eps_return = 0.0
         done =False
         step = 0
 
@@ -259,19 +255,17 @@ else:
 
     tot_episodes = 0
     timesteps = 0
-    save_on_episodes = args["save_on_episode"]
 
     for eps in range (args_main.nb_episodes):
 
         obs, _ = env.reset()
 
         tot_episodes += 1
-        eps_return = 0.0
         done =False
         step = 0
 
         while not done:
-            action, entropy = agent.select_action(
+            action, _ = agent.select_action(
                 torch.tensor(obs, dtype=torch.float32).unsqueeze(0).to(device)
             )
             action = action[0]

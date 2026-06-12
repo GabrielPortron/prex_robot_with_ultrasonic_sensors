@@ -36,7 +36,6 @@ os.makedirs(LOGS_DIR, exist_ok=True)
 
 file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of the path
 args = parse_arguments_from_ini(file_config_path)
-last_mod_time = os.path.getmtime(file_config_path)
 
 # Uncomment below when debugging
 # args_main.no_wandb = True 
