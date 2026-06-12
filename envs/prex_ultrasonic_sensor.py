@@ -1,6 +1,6 @@
 import math
-# import rclpy
-# from rclpy.node import Node
+import rclpy
+from rclpy.node import Node
 from std_msgs.msg import String, Float32MultiArray
 from nav_msgs.msg import Odometry
 
@@ -235,7 +235,7 @@ class PrexWorld(gym.Env):
                     )
                 )
         
-        self.state_space = Tuple(
+        self.observation_space = Tuple(
                     (   Box(0.3, 4, dtype=np.float32),                                            # front distance
                         Box(0.3, 4, dtype=np.float32),                                            # back distance
                         Box(0.3, 4, dtype=np.float32),                                            # left distance
@@ -442,6 +442,7 @@ class PrexWorld(gym.Env):
         if self.dist <= self.radius_target:
             terminated = True
             self.info["terminate"] = "it reached the goal"
+            reward = 100.0
         
         if abs(self.position[2])>0.139 or abs(self.position[2])<0.137 or self.dist > 4:
             terminated = True
@@ -455,7 +456,7 @@ class PrexWorld(gym.Env):
 
         return (reward, terminated, truncated)
 
-    def reset(self):
+    def reset(self, seed=None):
         self.episode_counter += 1
         self.last_action=np.zeros(2)
         self.last_theta = 0.0
@@ -568,7 +569,7 @@ class PrexWorld(gym.Env):
                     print(state[3])
 
             action[0] = 0.0
-            action[1] = 0.0
+            # action[1] = 0.0
 
         self.can_move = move
         self.moves[:] = move_fw, move_bw, move_lf, move_rg

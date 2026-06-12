@@ -94,7 +94,7 @@ agent = SAC(
 )
 
 tot_episodes = 0
-timesteps = 0
+timesteps = 0l
 probability_training = 1.0
 save_on_episodes = args["save_on_episode"]
 running_avg_reward = 0
