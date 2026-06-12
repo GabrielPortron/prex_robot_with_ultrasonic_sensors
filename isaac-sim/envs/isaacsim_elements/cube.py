@@ -8,7 +8,7 @@ class Cube:
             self,
             world,
             dimension: float = 0.3,
-            perimeter: tuple[float, float] =(2.0, 2.0)
+            perimeter: tuple[float, float] = (2.0, 2.0)
     ):
         """Manages a configurable number of cubic obstacles for the robot's
         training environment.
@@ -16,7 +16,8 @@ class Cube:
         Cubes are created at the origin by create_cubes() and repositioned
         at the start of each episode by set_up_all_cubes(). Each cube is
         placed at a random location that avoids the goal area, the robot,
-        and all previously placed cubes.
+        and all previously placed cubes. A minimum clearance distance between
+        all objects can be configured via distance_between_objects.
 
         Args:
             world: The Isaac Sim World instance the cubes will be added to.
@@ -28,10 +29,9 @@ class Cube:
                 Defaults to (2.0, 2.0).
 
         Attributes:
-            scale (float): Side length of each cube in metres, equal to
-                dimension. Used to build the FixedCuboid scale vector.
-            size (float): Collision radius used for placement validation,
-                equal to dimension.
+            size (float): Side length of each cube in metres, equal to
+                dimension. Used to build the FixedCuboid scale vector and
+                as the collision radius for placement validation.
             hx (float): Maximum x-coordinate for cube spawning, equal to
                 half the region length minus half the cube size.
             hy (float): Maximum y-coordinate for cube spawning, equal to
@@ -90,14 +90,16 @@ class Cube:
             distance_between_objects: float,
     ) -> np.ndarray:
         """Repositions a single cube to a random valid location that avoids
-        all known obstacles.
+        all known obstacles with a configurable clearance margin.
 
-        A location is valid when it is sufficiently far from:
-            - The goal (origin): distance > target_radius + cube_size / 2
-            - The robot (first entry in obstacle_positions):
-                distance > robot_size + cube_size / 2
-            - All previously placed cubes (remaining entries):
-                distance > cube_size * 3 / 2
+        A location is valid when the distance to each obstacle exceeds its
+        minimum range plus distance_between_objects:
+            - Goal (origin, index 0):
+                distance > target_radius + cube_size / 2 + clearance
+            - Robot (index 1):
+                distance > robot_size + cube_size / 2 + clearance
+            - Previously placed cubes (index 2+):
+                distance > cube_size * 3 / 2 + clearance
 
         Samples uniformly at random until a valid location is found. A
         random yaw is also assigned so cubes are not all axis-aligned.
@@ -106,12 +108,15 @@ class Cube:
             cube: The FixedCuboid instance to reposition.
             target_radius (float): Radius of the goal exclusion zone in
                 metres.
-            obstacle_positions (list[np.ndarray]): List of 2D positions
-                [x, y] of obstacles already placed. The first entry must
-                always be the robot position; subsequent entries are
-                previously placed cubes.
-            robot_size (float): Collision radius of the robot in metres,
-                used to compute the minimum clearance distance to the robot.
+            obstacle_positions (list[np.ndarray]): Ordered list of 2D
+                positions [x, y] of obstacles already placed. Index 0 must
+                be the goal position, index 1 the robot position, and
+                subsequent indices previously placed cubes.
+            robot_size (float): Collision radius of the robot in metres.
+            distance_between_objects (float): Additional clearance in metres
+                added to every minimum separation distance. Increase this
+                to spread cubes further apart and away from the robot and
+                goal.
 
         Returns:
             np.ndarray: The 2D position [x, y] of the placed cube, to be
@@ -163,20 +168,26 @@ class Cube:
             distance_between_objects: float,
             nb_cubes: int = 0,
     ) -> None:
-        """Repositions all cubes at the start of an episode by calling
+        """Repositions nb_cubes cubes at the start of an episode by calling
         teleport_cube() sequentially.
 
-        Each cube's placed position is added to the obstacle list before
-        placing the next one, so cubes are guaranteed not to overlap each
-        other or the robot.
+        The obstacle list is seeded with the goal position and robot position
+        so that subsequent cubes avoid both. Each placed cube's position is
+        appended to the list before the next cube is placed, ensuring no
+        two cubes overlap each other.
 
         Args:
+            target_position (tuple): 2D goal position [x, y] in metres,
+                used as the first entry in obstacle_positions to keep cubes
+                away from the goal area.
             target_radius (float): Radius of the goal exclusion zone in
                 metres, passed to teleport_cube().
             robot_position (np.ndarray): Current 2D robot position [x, y]
-                in metres, used as the first entry in obstacle_positions.
+                in metres, used as the second entry in obstacle_positions.
             robot_size (float): Collision radius of the robot in metres,
                 passed to teleport_cube().
+            distance_between_objects (float): Additional clearance in metres
+                added to every minimum separation, passed to teleport_cube().
             nb_cubes (int): Number of cubes to reposition. Should match the
                 value passed to create_cubes(). Defaults to 0.
         """

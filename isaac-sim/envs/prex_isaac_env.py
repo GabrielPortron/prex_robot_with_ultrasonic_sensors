@@ -46,12 +46,12 @@ class State:
                 vector components (cos_yaw, sin_yaw, delta) as a 3-tuple, or
                 None to exclude the heading vector entirely.
                 Example: (1.0, 1.0, 100.0)
-            controller (bool | None): Maximum absolute value for the controller
-                flag dimension, or None to exclude it from the state vector.
-                When not None, a single dimension is appended at the end of the
-                state vector encoding whether the obstacle avoidance controller
-                was active on the current step (0 = inactive, 1 = active).
-                Example: 1
+            controller (bool | None): If True, appends a single binary dimension
+                to the state vector encoding whether the obstacle avoidance
+                controller was active on the current step (0 = inactive,
+                1 = active). The bounds for this dimension are fixed at [0, 1]
+                regardless of value. Pass False or None to exclude it.
+                Example: True
             
         Attributes:
             nb_sensors (int): Number of active sensor dimensions, counted during
@@ -88,6 +88,10 @@ class State:
         The heading_vec field is treated as a 3-element group
         (cos_yaw, sin_yaw, delta) and adds 3 dimensions at once.
         The controller field adds a single dimension if not None.
+
+        The controller field, if true, appends one dimension with bounds
+        [0, 1] rather than symmetric [-value, +value] bounds, since the flag
+        is always non-negative.
 
         After this call the following attributes are available:
             observation_space (gymnasium.spaces.Box): The observation space.
@@ -150,38 +154,36 @@ class State:
         self.state = np.zeros(self.state_length, dtype=np.float32)
 
     def update_values(self,
-                    sensors: np.ndarray,
-                    position: np.ndarray,
-                    orientation: float | np.ndarray,
-                    linear_speed: float | np.ndarray,
-                    angular_speed: float | np.ndarray,
-                    heading_vec: np.ndarray,
-                    controller: np.ndarray
-                    ) -> None:
-        """Overwrites the internal state vector by concatenating the individual
-        components in declaration order and rounding to 5 decimal places to
-        reduce floating-point noise.
+                      sensors: np.ndarray,
+                      position: np.ndarray,
+                      orientation: float | np.ndarray,
+                      linear_speed: float | np.ndarray,
+                      angular_speed: float | np.ndarray,
+                      heading_vec: np.ndarray,
+                      controller: np.ndarray
+                      ) -> None:
+        """Stores the individual state components as rounded attributes.
+        The flat state vector is assembled lazily by get_values() when
+        needed, rather than eagerly here.
 
-        Each argument corresponds to one group in the State configuration. Only
-        the components that were declared as non-None in __init__ are present in
-        the internal vector, but the caller is responsible for passing the full
-        arrays — filtering is handled by init_spaces(), not here.
+        Rounding to 5 decimal places on each component reduces accumulated
+        floating-point noise without affecting training dynamics.
 
         Args:
             sensors (np.ndarray): Sensor distance readings, shape (n_sensors,).
             position (np.ndarray): Robot world-frame position [x, y, z],
                 shape (3,).
-            orientation (float | np.ndarray): Yaw angle in radians (scalar), or
-                full orientation array if more angles are included.
-            linear_speed (float | np.ndarray): Forward speed in m/s (scalar), or
-                array if multiple velocity components are included.
-            angular_speed (float | np.ndarray): Yaw rate in rad/s (scalar), or
-                array if multiple angular velocity components are included.
+            orientation (float | np.ndarray): Yaw angle in radians wrapped
+                as a 1-element array, shape (1,).
+            linear_speed (float | np.ndarray): Forward speed in m/s wrapped
+                as a 1-element array, shape (1,).
+            angular_speed (float | np.ndarray): Yaw rate in rad/s wrapped
+                as a 1-element array, shape (1,).
             heading_vec (np.ndarray): Concatenated heading vector and angular
                 error [cos_yaw, sin_yaw, delta], shape (3,).
-            controller (np.ndarray): Binary flag indicating whether the obstacle
-                avoidance controller was active on this step, shape (1,).
-                Value is 1 if the controller overrode the action, 0 otherwise.
+            controller (np.ndarray): Binary flag indicating whether the
+                obstacle avoidance controller was active on this step,
+                shape (1,). Value is 1 if active, 0 otherwise.
         """
         self.sensors = np.round(sensors, 5)
         self.position = np.round(position, 5)
@@ -192,11 +194,15 @@ class State:
         self.controller = controller
 
     def get_values(self) -> np.ndarray:
-        """Returns the current state vector.
+        """Assembles and returns the flat state vector by concatenating all
+        stored components in declaration order, then writes the result into
+        the pre-allocated self.state array.
 
         Returns:
             np.ndarray: 1D array of shape (state_length,) and dtype float32
-                containing the most recent values set by update_state().
+                containing the values set by the most recent update_values()
+                call. The same array object is reused each call to avoid
+                repeated allocation.
         """
         new_state = np.concatenate([self.sensors,
                                     self.position,
@@ -263,6 +269,8 @@ class PrexIsaacEnv(gym.Env):
             max_angular_speed (float): Maximum angular speed of the robot in
                 rad/s, used to clip actions and define observation bounds.
                 Defaults to 0.4.
+            target_point (tuple): World-frame 2D coordinates [x, y] of the goal
+                that the robot must reach. Defaults to (0.0, 0.0) — the origin.
             radius_target (float): Radius in metres within which the robot is
                 considered to have reached the goal. Defaults to 0.3.
             physics_dt (float): Physics simulation timestep in seconds.
@@ -277,10 +285,30 @@ class PrexIsaacEnv(gym.Env):
             cube (int): Number of cube obstacles to spawn in the arena. Each
                 cube is repositioned at the start of every episode. Set to 0
                 for no obstacles. Stored as self.nb_cube. Defaults to 0.
+            cube_dimension (float): Side length of each cube obstacle in metres.
+                Defaults to 0.3.
+            dist_objects (float): Additional clearance in metres added to the
+                minimum separation between all spawned objects (goal, robot,
+                cubes). Increase to spread obstacles further apart.
+                Defaults to 0.2.
+            borderless_perimeter (list): Spawn region dimensions [width, height]
+                in metres used when arena=False. The robot and cubes are confined
+                to this region even without physical walls. Defaults to (5.0, 5.0).
+            arena_geometry (list): Arena geometry as
+                [(width, height), wall_depth, wall_height] in metres.
+                Defaults to [(2.0, 2.0), 0.2, 0.5].
             arena (bool): If True, builds rectangular arena walls around the
                 training area. If False, only a ground plane is created and
                 self.perimeter is set to a large default value (5.0 x 5.0 m)
                 to allow open-world training. Defaults to False.
+            sensor_config (tuple): Configuration passed to UltrasonicSensors
+                describing the sensor cone geometry as (total_angle_deg,
+                cone_angle_deg, n_rays_per_sensor). Defaults to (180.0, 15.0, 5).
+            activate_controller (bool): If True, the obstacle avoidance safety
+                controller is applied to every action in step() before it reaches
+                the robot. Set to False to disable the override entirely, e.g.
+                when evaluating a policy that has already learned to avoid
+                obstacles. Defaults to True.
             repeating_action (int): Number of physics steps to simulate per
                 call to step(). Higher values give the robot more time to
                 respond to each action command. Defaults to 1.
@@ -288,9 +316,6 @@ class PrexIsaacEnv(gym.Env):
                 Defaults to "cuda".
             seed (int | None): Random seed passed to the Gymnasium base class.
                 Defaults to None.
-            arena_geometry (list): Arena geometry as
-                [(width, height), wall_depth, wall_height] in metres.
-                Defaults to [(2.0, 2.0), 0.2, 0.5].
 
         Raises:
             AssertionError: If both cube=True and sensors=True are passed,
@@ -299,6 +324,15 @@ class PrexIsaacEnv(gym.Env):
         The following internal state attributes are also initialised:
             self.orientation (np.ndarray): Current Euler angles [roll, pitch, yaw]
                 in radians, shape (3,). Updated each step by read_state().
+            self.last_position (np.ndarray): Robot position from the previous
+                step, shape (3,). Stored for reward shaping or debugging.
+            self.controlled_speed (float): Magnitude of the linear velocity
+                at the moment the controller last triggered an override. Stored
+                for reward shaping purposes.
+            self.rend (bool): Derived from rendering_dt. True when
+                rendering_dt < 1.0, indicating that the viewport should be
+                updated during step(). Used internally to pass render=True to
+                sensors.draw_rays().
             self.needed_control (bool): Flag set to True by controller() when the
                 obstacle avoidance override was triggered on the current step.
                 Used by update_reward() to apply a penalty. Reset externally or
@@ -359,7 +393,7 @@ class PrexIsaacEnv(gym.Env):
         self.state.init_spaces()
         self.observation_space = self.state.get_observation_space()
 
-        self.goal            = np.array([self.target_point])
+        self.goal            = np.array(self.target_point)
         self.dist            = 0.0
         self.theta           = 0.0
         self.linear_speed    = 0.0
@@ -402,7 +436,8 @@ class PrexIsaacEnv(gym.Env):
     def __launch(self) -> None:
         """Launches Isaac Sim in headless mode, builds the scene, and
         initialises the physics simulation. Called once automatically by
-        __init__. Do not call manually.
+        __init__. The double underscore prefix makes this method name-mangled
+        — it cannot be called or overridden by subclasses or external code.
 
         Steps performed:
             1. Start SimulationApp (headless).
@@ -410,12 +445,16 @@ class PrexIsaacEnv(gym.Env):
             3. Create the World and add a default ground plane.
             4. Optionally build arena walls (only if has_arena=True).
             5. Instantiate the Cube manager and create nb_cube cubes at the
-            origin. If nb_cube=0 no visible cubes are added to the scene
-            but the manager object is still created.
+               origin. If nb_cube=0 no visible cubes are added to the scene
+               but the manager object is still created.
             6. Load the Create3 robot.
-            7. Initialise the analytic ultrasonic sensors.
-            8. Run world.reset() and robot.initialize() to start physics.
-            9. Run 30 warm-up steps to let physics settle before training.
+            7. Initialise the UltrasonicSensors with the nb_sensors count
+               derived from the State configuration and the sensor_config
+               cone geometry tuple.
+            8. Run world.reset(), robot.initialize(), and
+               sensors.initialize() to start physics and the PhysX query
+               interface.
+            9. Run 30 warm-up steps so physics settles before training.
         """
         from isaacsim import SimulationApp
 
@@ -569,9 +608,16 @@ class PrexIsaacEnv(gym.Env):
                     max_episode_length.
                 - info (dict): Contains "terminate" key with a human-readable
                     reason string when terminated or truncated.
+        
+        Note:
+            draw_rays() is called before world.step() so the ray visualisation
+            reflects the robot's position at the start of the current step
+            rather than one step behind. self.rend controls whether rendering
+            is active based on the rendering_dt passed at construction.
         """
         self.step_counter += 1
-
+        self.needed_control = False
+        
         if self.activate_controller:
             action = self.controller(action)
 
@@ -609,19 +655,26 @@ class PrexIsaacEnv(gym.Env):
 
         The full set of four sensor distances (front, back, left, right) is
         always computed analytically, but only the subset declared as non-None
-        in the State configuration is passed to update_state(). Currently only
-        the front sensor is active (back, left, right are None), so sensors
-        passed to update_state() has shape (1,).
+        in the State configuration is passed to update_state().
 
-        The state vector is assembled in this order, matching the State
-        declaration in __init__:
-            [d_front, d_back,            ← front and back sensor distances
+        The heading vector is negated relative to the robot's forward direction:
+            heading_vec = [-cos(yaw), -sin(yaw)]
+        This points from the robot toward the origin (goal) when the robot faces
+        it, making delta a direct measure of how misaligned the robot is with the 
+        goal direction.
+
+        The state vector is assembled in this order:
+            [d_s0, ..., d_sN,            ← all active sensor distances
             x, y, z,                   ← position
             yaw,                       ← orientation (yaw only)
             vx,                        ← forward linear speed
             wz,                        ← yaw rate
             cos_yaw, sin_yaw, delta,   ← heading vector + angle error
             controller_flag]           ← 1 if controller was active, else 0
+
+        The number of sensor dimensions matches self.state.nb_sensors, which is
+        determined by the State configuration in __init__ and passed to
+        UltrasonicSensors at construction.
 
         Updates:
             self.position, self.orientation, self.theta, self.linear_speed,
@@ -670,39 +723,51 @@ class PrexIsaacEnv(gym.Env):
     def update_reward(
             self,
             action: np.ndarray,
-            state: np.ndarray=None
+            state: np.ndarray = None,
     ) -> tuple[float, bool, bool]:
         """Computes the reward and episode termination flags for the current
-        transition. Uses different reward formulations for PPO and SAC.
+        transition.
 
-        Reward formulation:
+        Reward formulations:
             PPO: 1/(delta + 0.3) + 1/(dist + 0.01) — always positive,
                 peaks when both angle error and distance are small.
-            SAC: -delta - dist — always negative, encourages minimising
-                both angle error and distance simultaneously.
+            SAC: A multiplicative term combining forward speed, heading
+                alignment, and proximity to the goal:
+                    (speed_term * delta_term * dist_term) / 1000
+                        - int(needed_control)
+                where:
+                    speed_term = 1 / (0.51 - action[0])  — rewards higher
+                        forward speed; 0.51 is slightly above max_linear_speed
+                        to keep the term positive.
+                    delta_term = 1 / (delta + 0.1)  — rewards facing the goal.
+                    dist_term  = 1 / (dist + 0.1)   — rewards proximity.
+                The controller penalty subtracts 1.0 when the safety
+                controller overrode the action.
 
-        Additional penalties and overrides (applied after the base reward):
-            - If the obstacle avoidance controller was activated on this step
-            (self.needed_control is True): -0.05 penalty. This discourages the
-            agent from driving into obstacles and relying on the controller
-            override rather than learning to avoid them independently.
-            The cube-based sensor penalty is currently commented out.
-            - Timeout (step_counter >= max_episode_length): reward = -1.0,
-            truncated = True.
-            - Flipped or out of bounds (z > 0.40 or dist > 4.0):
-            reward = -5.0, terminated = True.
-            - Goal reached (dist <= radius_target): reward += 100.0,
-            terminated = True.
+        Additional bonuses and overrides (applied after base reward):
+            - Front sensor reading > 0.30 m (no imminent obstacle): +0.5
+              bonus, rewarding the robot for maintaining safe clearance.
+            - Timeout (step_counter >= max_episode_length): reward = -0.5,
+              truncated = True.
+            - Flipped or out of bounds (z > 0.40 or dist > 100.0):
+              reward = -0.5, terminated = True.
+            - Goal reached (dist <= radius_target AND action[0] >= 0.0):
+              reward = 10.0, terminated = True. The forward-speed condition
+              prevents the episode from ending while the robot is reversing
+              through the goal.
 
-        Note: The goal check runs last, so a robot that simultaneously reaches
-            the goal and exceeds max steps will be marked as terminated (goal),
-            not truncated.
+        Note:
+            The out-of-bounds threshold is 100.0 m (not 4.0 m as in earlier
+            versions) to accommodate the larger open-world training area.
+            The goal check requires action[0] >= 0.0 so the robot must be
+            moving forward or stopped when it reaches the goal.
 
         Args:
-            state (np.ndarray): Current state vector (used to read sensor
-                distance in cube mode via state[0]).
-            action (np.ndarray): Current action [v, w] (unused in this
-                implementation, kept for interface consistency).
+            action (np.ndarray): Current action [v, w] used in the SAC
+                speed term and the goal forward-speed check.
+            state (np.ndarray | None): Unused. Present for interface
+                compatibility with callers that pass a state argument.
+                Defaults to None.
 
         Returns:
             tuple[float, bool, bool]:
@@ -747,11 +812,11 @@ class PrexIsaacEnv(gym.Env):
         velocity component of the action when a sensor detects an obstacle
         within the detection threshold.
 
-        The controller checks whether the robot is moving toward a detected
-        obstacle and, if so, zeroes the linear velocity while preserving the
-        angular velocity so the robot can rotate away. It sets self.needed_control
-        to True when an override occurs, which update_reward() uses to apply a
-        small penalty.
+        When an override occurs, self.needed_control is set to True and
+        self.controlled_speed is set to the absolute value of the linear
+        velocity that was suppressed. self.controlled_speed can be used by
+        update_reward() or external logging to measure how aggressively the
+        controller intervened.
 
         The behaviour depends on how many sensors are active (self.state.nb_sensors):
             0 sensors: the action is returned unchanged and a warning is printed
