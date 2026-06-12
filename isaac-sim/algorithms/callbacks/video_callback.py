@@ -56,7 +56,7 @@ class VideoCallback(BaseCallback):
         self.camera = Camera(
             prim_path="/World/camera",
             position=np.array([0.0, 0.0, 5.0]),
-            orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
+            orientation=euler_to_quaternion([-180.0, -90.0, 0.0], degrees=True, inverted=True),
             frequency=self.fps,
             resolution=self.resolution
         )
