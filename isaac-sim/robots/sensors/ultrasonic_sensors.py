@@ -41,11 +41,19 @@ class UltrasonicSensors:
                 position at which rays are cast, in metres. Should
                 approximate the physical height of the sensors on the robot.
                 Defaults to 0.2.
-            lateral_sensors_angle (int): The angle between the two lateral sensors. 
-                When using four sensors, you can adjust this setting to modify the 
-                position of the lateral sensors: you can put them forward with an 
-                angle < 180° or backward with an angle > 180°. You will then lose 
-                information on the sides. Defaults to 180 (all sensors orthogonal).
+            sensor_config (tuple): A 3-element tuple
+                (lateral_sensors_angle, cone_angle, nb_rays) where:
+                - lateral_sensors_angle (float): Angle in degrees between
+                  the two lateral sensors. At 180° the sensors are
+                  orthogonal to each other and to the front/back sensors.
+                  Values below 180° rotate the lateral sensors toward the
+                  front; values above 180° rotate them toward the back.
+                  Only has an effect when nb_sensors=4. Defaults to 180.0.
+                - cone_angle (float): Full cone angle in degrees over which
+                  nb_rays are spread for each sensor. Defaults to 15.0.
+                - nb_rays (int): Number of rays cast per sensor cone.
+                  The minimum distance across all rays is returned as the
+                  sensor reading. Defaults to 5.
 
         Attributes:
             sensor_dirs (dict): Mapping from sensor name to its unit
@@ -155,20 +163,18 @@ class UltrasonicSensors:
         """Draws the sensor cone rays into the Isaac Sim viewport by writing
         line segments into the USD BasisCurves prim created by initialize().
 
-        Each ray is coloured according to the distance it measures —
+        Uses self.cone_angle and self.nb_rays (set from sensor_config at
+        construction time) so the visualisation always matches the raycasting
+        behaviour. Each ray is coloured according to the distance it measures:
         green for close obstacles, yellow for mid-range, red for nothing
-        nearby. The prim is updated every call so rays move with the robot.
+        nearby. The prim is updated on every call so rays move with the robot.
 
-        Only has an effect when initialize(render=True) was called. Does
-        nothing silently if the prim does not exist.
+        Only has an effect when initialize(render=True) was called. Exits
+        silently if the prim does not exist.
 
         Args:
             origin (np.ndarray): World-frame robot position [x, y, z].
             yaw (float): Robot yaw angle in radians.
-            cone_angle (float): Full cone angle in degrees, must match the
-                value used in get_distances(). Defaults to 15.0.
-            n_rays (int): Number of rays per sensor, must match the value
-                used in get_distances(). Defaults to 5.
         """
         import omni.usd
         from pxr import UsdGeom, Gf, Vt
@@ -251,9 +257,9 @@ class UltrasonicSensors:
             origin: np.ndarray,
             central_dir: np.ndarray,
     ) -> float:
-        """Approximates an ultrasonic cone sensor by casting n_rays spread
-        evenly across a horizontal fan of cone_angle degrees centred on
-        central_dir, and returning the minimum distance found.
+        """Approximates an ultrasonic cone sensor by casting self.nb_rays
+        spread evenly across a horizontal fan of self.cone_angle degrees
+        centred on central_dir, and returning the minimum distance found.
 
         Rays are kept strictly horizontal (z component = 0) to avoid
         self-collision with the robot's own collision mesh.
@@ -263,10 +269,6 @@ class UltrasonicSensors:
                 already offset vertically by sensor_height.
             central_dir (np.ndarray): Unit vector of the cone's central
                 axis in world frame.
-            cone_angle (float): Full angle of the cone in degrees.
-                Defaults to 15.0.
-            n_rays (int): Number of rays spread across the cone.
-                Defaults to 5.
 
         Returns:
             float: Minimum distance across all ray hits, clipped to
