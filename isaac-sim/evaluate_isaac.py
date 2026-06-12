@@ -35,7 +35,7 @@ parser.add_argument("--model",    type=str, required=True,
                     help="Path to the saved model zip (without .zip extension)")
 parser.add_argument("--weight",    type=int, required=True,
                     help="'Age' of the model")
-parser.add_argument("--nb_episode",    type=int, required=True,
+parser.add_argument("--nb_episodes",    type=int, required=True,
                     help="Number of episodes for the evaluation")
 args_main = parser.parse_args()
 
