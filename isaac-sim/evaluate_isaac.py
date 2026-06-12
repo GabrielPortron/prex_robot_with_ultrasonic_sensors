@@ -67,14 +67,17 @@ if args_main.ppo:
         max_angular_speed=args["max_angular_speed"],
         radius_target=args["radius_target"],
         physics_dt=1.0/60.0,
-        rendering_dt=1.0/15.0,
+        rendering_dt=1.0,
         verbose=args["verbose"],
         ppo=True,
         cube=args_main.cube,
-        arena=False,
+        borderless_perimeter=args["borderless_perimeter"],
+        cube_dimension=args["cube_dimension"],
+        arena=args_main.arena,
+        arena_geometry=args["arena_geometry"],
+        sensor_config=args["sensor_config"],
         repeating_action=args["repeating_action"],
         device=device,
-        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
     )
 
     print("[Playing] ... Environment created")
@@ -132,7 +135,7 @@ if args_main.ppo:
     tot_episodes = 0
     timesteps = 0
 
-    for eps in range (10):
+    for eps in range (args_main.nb_episodes):
 
         obs = env.reset()
         
@@ -174,14 +177,17 @@ else:
         max_angular_speed=args["max_angular_speed"],
         radius_target=args["radius_target"],
         physics_dt=1.0/60.0,
-        rendering_dt=1.0/15.0,
+        rendering_dt=1.0,
         verbose=args["verbose"],
         ppo=False,
         cube=args_main.cube,
-        arena=False,
+        borderless_perimeter=args["borderless_perimeter"],
+        cube_dimension=args["cube_dimension"],
+        arena=args_main.arena,
+        arena_geometry=args["arena_geometry"],
+        sensor_config=args["sensor_config"],
         repeating_action=args["repeating_action"],
         device=device,
-        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
     )
 
     print("[Playing] ... Environment created")
