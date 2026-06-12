@@ -41,7 +41,7 @@ Features include:
 - Up to 4 simulated ultrasonic sensors: front, back, left, right
 - Sensor range: 0.30 m (minimum) to 6.0 m (maximum)
 - Arena: Optional L1×L2 m square enclosure with static walls
-- Goal: World origin (centre of the arena)
+- Goal: A configurable 2D point `(x, y)`
 
 **State Space (Observations):**
 
@@ -182,7 +182,7 @@ borderless_perimeter = (L1, L2)
 
 ### Cube Obstacles
 
-The number of cube obstacles is specified at launch time via the `--cube` argument (see [Usage](#usage)). Cubes are static physical objects — the robot cannot push them. They are randomly repositioned at the start of each episode, always away from the robot and the goal.
+The number of cube obstacles is specified at launch time via the `--cube` argument (see [Usage](#usage)). Cubes are static physical objects — the robot cannot push them. They are randomly repositioned at the start of each episode, always away from the robot and the goal. The minimal distance between each obstacle can be configured in `config.ini`.
 
 The only practical limit on the number of cubes is the available space: the placement algorithm loops until it finds a valid non-overlapping position for each cube, so placing too many in a small area can cause the program to hang. In a 5×5 m area, no more than around 10 cubes is recommended.
 
@@ -298,9 +298,11 @@ Edit `config.ini` to adjust hyperparameters. All values can be **hot-reloaded du
 | `max_linear_speed` | 0.5 | Action bound for linear velocity (m/s) |
 | `max_angular_speed` | 0.5 | Action bound for angular velocity (rad/s) |
 | `repeating_action` | 20 | Physics steps simulated per `env.step()` call |
+| `target_point` | (0.0, 0.0) | Coordinates of the target (m) |
 | `radius_target` | 0.2 | Goal acceptance radius (m) |
 | `borderless_perimeter` | (5.0, 5.0) | Robot and cube spawn region when not using arena (m) |
 | `cube_dimension` | 0.3 | Side length of each cube obstacle (m) |
+| `distance_between_objects` | 0.2 | Security distance between the spawned objects (m) |
 | `arena_geometry` | [(2.0, 2.0), 0.2, 0.5] | Arena inner dimensions, wall depth, wall height (m) |
 | `sensor_config` | (180.0, 15.0, 5) | Lateral sensor angle (°), cone angle (°), rays per sensor |
 
