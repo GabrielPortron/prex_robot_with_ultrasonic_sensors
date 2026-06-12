@@ -232,6 +232,7 @@ class PrexIsaacEnv(gym.Env):
             verbose: bool = False,
             ppo: bool = False,
             cube: int = 0,
+            cube_dimension: float = 0.3,
             borderless_perimeter: list = (5.0, 5.0),
             arena_geometry: list = [(2.0, 2.0), 0.2, 0.5],
             arena: bool = False,
@@ -311,6 +312,7 @@ class PrexIsaacEnv(gym.Env):
         self.verbose            = verbose
         self.ppo                = ppo
         self.nb_cube            = cube
+        self.cube_dimension = cube_dimension
         self.borderless_perimeter = borderless_perimeter
         self.has_arena          = arena
         self.activate_controller = activate_controller
@@ -436,13 +438,12 @@ class PrexIsaacEnv(gym.Env):
             )
             self.arena.build()
  
-        self.cube = Cube(
+        self.cubes = Cube(
             world=self.world,
-            nb_cube=self.nb_cube,
-            scale=(0.3, 0.3, 0.3),
+            scale=(self.cube_dimension, self.cube_dimension, 0.3),
             perimeter=self.perimeter,
         )
-        self.cube.create_cubes()
+        self.cubes.create_cubes(nb_cubes=self.nb_cube)
 
         self.robot = Create3Robot(world=self.world, prim_path="/World/create_3")
         self.robot.load()
@@ -525,6 +526,7 @@ class PrexIsaacEnv(gym.Env):
             target_radius=self.radius_target,
             robot_position=self.position[:2],
             robot_size=0.4,
+            nb_cubes=self.nb_cube
         )
 
         return self.state.get_values().copy(), self.info

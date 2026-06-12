@@ -7,8 +7,7 @@ class Cube:
     def __init__(
             self,
             world,
-            nb_cube: int,
-            scale: tuple[float, float, float] =(0.2, 0.2, 0.2),
+            dimension: float = 0.3,
             perimeter: tuple[float, float] =(2.0, 2.0)
     ):
         """The class that manages a configurable number of cubic obstacles
@@ -42,8 +41,7 @@ class Cube:
                 create_cubes().
         """
         self.world = world
-        self.nb_cube = nb_cube
-        self.scale = scale
+        self.scale = dimension
         self.size = self.scale[2]
 
         self.perimeter = perimeter
@@ -54,7 +52,7 @@ class Cube:
 
         self.cubes = []
     
-    def create_cubes(self) -> None:
+    def create_cubes(self, nb_cubes: int = 0) -> None:
         """Creates nb_cube FixedCuboid instances and adds them to the world
         scene. All cubes are initially placed at the origin — call
         set_up_all_cubes() at the start of each episode to distribute them
@@ -64,7 +62,7 @@ class Cube:
         (cube0, cube1, ...) and stored in self.cubes for later access by
         teleport_cube() and set_up_all_cubes().
         """
-        for i in range(self.nb_cube):
+        for i in range(nb_cubes):
 
             name = f"cube{i}"
 
@@ -75,7 +73,7 @@ class Cube:
                     name=name,
                     position=np.array([0.0, 0.0, 0.0]),
                     orientation=np.array([1.0, 0.0, 0.0, 0.0]),
-                    scale=self.scale
+                    scale=np.array([self.scale, self.scale, self.scale])
                 )
 
             self.world.scene.add(cube)
@@ -155,7 +153,8 @@ class Cube:
             self,
             target_radius: float,
             robot_position: np.ndarray,
-            robot_size: float
+            robot_size: float,
+            nb_cubes: int = 0,
     ) -> None:
         """Repositions all nb_cube cubes at the start of an episode by
         calling teleport_cube() sequentially. Each cube's placed position
@@ -172,7 +171,7 @@ class Cube:
         """
         positions = [robot_position]
 
-        for i in range(self.nb_cube):
+        for i in range(nb_cubes):
             cube_position = self.teleport_cube(self.cubes[i], target_radius, positions, robot_size)
             positions.append(cube_position)
     
