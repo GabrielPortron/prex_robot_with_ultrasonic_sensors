@@ -14,6 +14,12 @@ from utils.utils import(
 
 from PIL import Image
 
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 from algorithms.sac import SAC
 
 from envs.prex_isaac_env import PrexIsaacEnv
