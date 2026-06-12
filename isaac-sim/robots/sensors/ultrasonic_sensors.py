@@ -3,8 +3,8 @@ import math
 
 from omni.physx import get_physx_scene_query_interface
 
-SENSOR_MIN_RANGE = 0.15
-SENSOR_MAX_RANGE = 20.0
+SENSOR_MIN_RANGE = 0.30
+SENSOR_MAX_RANGE = 6.0
 
 
 class UltrasonicSensors:
@@ -12,6 +12,7 @@ class UltrasonicSensors:
             self,
             nb_sensors: int = 4,
             sensor_height: float = 0.2,
+            lateral_sensors_angle: int = 180
     ):
         """Simulates directional ultrasonic sensors using Isaac Sim PhysX
         raycasting. Rays are cast horizontally from the robot's position
@@ -40,6 +41,11 @@ class UltrasonicSensors:
                 position at which rays are cast, in metres. Should
                 approximate the physical height of the sensors on the robot.
                 Defaults to 0.2.
+            lateral_sensors_angle (int): The angle between the two lateral sensors. 
+                When using four sensors, you can adjust this setting to modify the 
+                position of the lateral sensors: you can put them forward with an 
+                angle < 180° or backward with an angle > 180°. You will then lose 
+                information on the sides. Defaults to 180 (all sensors orthogonal).
 
         Attributes:
             sensor_dirs (dict): Mapping from sensor name to its unit
@@ -51,6 +57,7 @@ class UltrasonicSensors:
         """
         self.nb_sensors    = nb_sensors
         self.sensor_height = sensor_height
+        self.lat_angle           = math.radians(lateral_sensors_angle)
 
         if self.nb_sensors == 0:
             self.sensor_dirs = {}
@@ -70,8 +77,8 @@ class UltrasonicSensors:
             self.sensor_dirs = {
                 "front": np.array([ 1.0,  0.0, 0.0]),
                 "back":  np.array([-1.0,  0.0, 0.0]),
-                "left":  np.array([ 0.0,  1.0, 0.0]),
-                "right": np.array([ 0.0, -1.0, 0.0]),
+                "left":  np.array([ math.cos(self.lat_angle/2.0), math.sin(self.lat_angle/2.0), 0.0]),
+                "right": np.array([ math.cos(-self.lat_angle/2.0), math.sin(-self.lat_angle/2.0), 0.0]),
             }
 
         else:
