@@ -194,7 +194,7 @@ class State:
             self.state[i] = value
         self.state = np.round(self.state, 5)
 
-    def get_state(self) -> np.ndarray:
+    def get_values(self) -> np.ndarray:
         """Returns the current state vector.
 
         Returns:
@@ -355,6 +355,9 @@ class PrexIsaacEnv(gym.Env):
         self.delta           = 0.0
         self.heading_vec     = np.zeros(2,  dtype=np.float32)
         self.last_action     = np.zeros(2,  dtype=np.float32)
+        self.last_position   = np.zeros(3,  dtype=np.float32)
+        self.same_position   = 0
+        self.no_movement     = 0
 
         if self.has_arena:
             self.perimeter       = arena_geometry[0]
@@ -362,6 +365,11 @@ class PrexIsaacEnv(gym.Env):
             self.heigth          = arena_geometry[2]
         else:
             self.perimeter = np.array([5.0, 5.0])
+
+        if self.rendering_dt < 1.0:
+            self.rend = True
+        else:
+            self.rend = False
 
         self.world   = None
         self.arena   = None
@@ -404,8 +412,6 @@ class PrexIsaacEnv(gym.Env):
         from envs.isaacsim_elements.arena import Arena
         from robots.differential_robot import Create3Robot
         from robots.sensors.ultrasonic_sensors import UltrasonicSensors
-        # from envs.isaacsim_elements.sensors import UltrasonicSensors
-        # from envs.isaacsim_elements.physx_sensors import UltrasonicPhysXSensors
         from envs.isaacsim_elements.cube import Cube
 
         self.world = World()
@@ -432,10 +438,11 @@ class PrexIsaacEnv(gym.Env):
         self.robot = Create3Robot(world=self.world, prim_path="/World/create_3")
         self.robot.load()
 
-        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors)
+        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, fov=180)
 
         self.world.reset()
         self.robot.initialize()
+        self.sensors.initialize(render=self.rend)
 
         for _ in range(30):
             self.world.step(render=False)
@@ -511,7 +518,9 @@ class PrexIsaacEnv(gym.Env):
             robot_size=0.4,
         )
 
-        return self.state.get_state().copy(), self.info
+        self.same_position = 0
+
+        return self.state.get_values().copy(), self.info
 
     def step(self, action: np.ndarray, render: bool = False):
         """Advances the simulation by one environment step. The raw action is
@@ -548,25 +557,40 @@ class PrexIsaacEnv(gym.Env):
         action = self.controller(action)
         self.action       = action
         self.last_action  = action
+        self.last_position = self.position
         self.prev_dist    = self.dist
 
         linear_vel  = float(np.clip(action[0], -self.max_linear_speed,  self.max_linear_speed))
         angular_vel = float(np.clip(action[1], -self.max_angular_speed, self.max_angular_speed))
 
         self.robot.apply_action(command=[linear_vel, angular_vel])
+
+        if render:
+            self.sensors.draw_rays(origin=self.position, yaw=self.theta, cone_angle=15.0, n_rays=5)
+
         for _ in range(max(1, self.repeating_action)):
             self.world.step(render=render)
 
         self.read_state()
-        reward, terminated, truncated = self.update_reward(self.state, action)
+        reward, terminated, truncated = self.update_reward(action)
         self.timestep += 1
+
+        if abs(self.linear_speed) < 0.05:
+            self.no_movement += 1
+        else:
+            self.no_movement = 0
+
+        # if np.linalg.norm(self.last_position - self.position) < 1e-4 and self.action[1] < 0.1:
+        #     self.same_position += 1
+        # else:
+        #     self.same_position = 0
 
         if self.verbose:
             print(f"[step {self.step_counter}] v={linear_vel:.3f} "
                   f"w={angular_vel:.3f} dist={self.dist:.3f} "
                   f"reward={reward:.3f}")
 
-        return self.state.get_state().copy(), reward, terminated, truncated, self.info
+        return self.state.get_values().copy(), reward, terminated, truncated, self.info
 
     def read_state(self) -> None:
         """Reads the robot's current physical state from Isaac Sim, computes
@@ -613,7 +637,7 @@ class PrexIsaacEnv(gym.Env):
         self.dist         = float(np.linalg.norm(position[:2] - self.goal))
 
         self.heading_vec = np.array(
-            [math.cos(yaw), math.sin(yaw)], dtype=np.float32
+            [-math.cos(yaw), -math.sin(yaw)], dtype=np.float32
         )
         pos_vec      = position[:2]
         norm_pos_vec = np.linalg.norm(pos_vec)
@@ -627,20 +651,18 @@ class PrexIsaacEnv(gym.Env):
         front = np.array([full_sensors[0]])
         front_and_back = full_sensors[:2]
 
-        controller = np.array([int(self.needed_control)])
-
         self.state.update_state(sensors=full_sensors,
                                 position=self.position,
                                 orientation=np.array([self.theta]),
                                 linear_speed=np.array([self.linear_speed]),
                                 angular_speed=np.array([self.angular_speed]),
                                 heading_vec=np.concatenate([self.heading_vec, [self.delta]]),
-                                controller=controller)
+                                controller=np.array([int(self.needed_control)]))
 
     def update_reward(
             self,
-            state: np.ndarray,
-            action: np.ndarray
+            action: np.ndarray,
+            state: np.ndarray=None
     ) -> tuple[float, bool, bool]:
         """Computes the reward and episode termination flags for the current
         transition. Uses different reward formulations for PPO and SAC.
@@ -686,29 +708,29 @@ class PrexIsaacEnv(gym.Env):
         if self.ppo:
             reward = 1 / (self.delta + 0.3) + 1 / (self.dist + 0.01)
         else:
-            reward = -self.delta - self.dist
+            speed_term = 1 / (0.51 - action[0])
+            delta_term = 1 / (self.delta + 0.1)
+            dist_term = 1 / (self.dist + 0.1)
+            reward = (speed_term * delta_term * dist_term) / 1000 - int(self.needed_control)
 
-        # if self.has_cube and self.state.get_state()[0] < 0.35:
-        #     reward -= 0.05
-
-        if self.needed_control:
-            reward -= 5.0 * self.controlled_speed
-            self.needed_control = False
+        dist = self.state.get_values()[0] 
+        if dist > 0.30:
+            reward += 0.5
 
         if self.step_counter >= self.max_episode_length:
             truncated = True
             self.info["terminate"] = "max episode length"
-            reward = -1.0
+            reward = -0.5
 
-        if self.position[2] > 0.40 or self.dist > 4.0:
+        if self.position[2] > 0.40 or self.dist > 100.0:
             terminated = True
             self.info["terminate"] = "flipped or out of bounds"
-            reward = -5.0
+            reward = -0.5
 
-        if self.dist <= self.radius_target:
+        if self.dist <= self.radius_target and action[0] >= 0.0:
             terminated = True
             self.info["terminate"] = "reached the goal"
-            reward += 100.0
+            reward = 10.0
 
         return reward, terminated, truncated
 
@@ -750,7 +772,7 @@ class PrexIsaacEnv(gym.Env):
         lin_vel, ang_vel = action
         controlled_action = np.array([0.0, ang_vel])
         nb_sensors = self.state.nb_sensors
-        state = self.state.get_state()
+        state = self.state.get_values()
 
         if nb_sensors == 0:
             if self.verbose:
@@ -762,7 +784,7 @@ class PrexIsaacEnv(gym.Env):
                 if self.verbose:
                     print("Obstacle detected, controller activated")
                 self.needed_control = True
-                self.controlled_speed = lin_vel
+                self.controlled_speed = abs(lin_vel)
                 return controlled_action
             else:
                 return action
@@ -772,7 +794,7 @@ class PrexIsaacEnv(gym.Env):
                 if self.verbose:
                     print("Obstacle detected, controller activated")
                 self.needed_control = True
-                self.controlled_speed = lin_vel
+                self.controlled_speed = abs(lin_vel)
                 return controlled_action
             else:
                 return action
