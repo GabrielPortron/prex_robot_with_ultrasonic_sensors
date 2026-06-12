@@ -69,8 +69,8 @@ class DifferentialRobot:
         robot.initialize().
 
         The robot is spawned at the origin with a neutral orientation
-        (quaternion [w=1, x=0, y=0, z=0] — identity). Use teleport() after
-        initialize() to set a different starting pose.
+        (identity quaternion [qx=0, qy=0, qz=0, qw=1]). Use teleport()
+        after initialize() to set a different starting pose.
 
         Note:
             Subclasses that need a specific spawn position, orientation, or
@@ -121,17 +121,17 @@ class DifferentialRobot:
 
     def get_state(self) -> dict:
         """Reads the robot's current kinematic state from the physics
-        simulation and returns it as a dict with all quantities expressed in
-        consistent frames.
+        simulation and returns it as a dict with all quantities expressed
+        in consistent frames.
 
         Velocity frame conversion: Isaac Sim returns linear velocity in the
-        world frame. This method projects it onto the robot's body frame using
-        the current yaw so that linear_vel[0] is the true forward speed and
-        linear_vel[1] is the lateral (sideways) speed.
+        world frame. This method projects it onto the robot's body frame
+        using the current yaw so that linear_vel[0] is the true forward
+        speed and linear_vel[1] is the lateral (sideways) speed.
 
-        Orientation: the raw quaternion from Isaac Sim is unpacked as
-        [qw, qx, qy, qz] and converted to Euler angles (roll, pitch, yaw)
-        using quaternion_to_euler. Yaw is extracted as orientation[2].
+        Orientation: the raw quaternion from Isaac Sim is in [qw, qx, qy, qz]
+        order and is converted to Euler angles (roll, pitch, yaw) via
+        quaternion_to_euler with inverted=True. Yaw is the third element.
 
         Returns:
             dict with keys:
