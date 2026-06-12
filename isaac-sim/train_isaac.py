@@ -33,11 +33,9 @@ args_main = parser.parse_args()
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 MODELS_DIR = os.path.join("models", RUN_NAME)
 LOGS_DIR = os.path.join("logs", RUN_NAME)
-BEST_DIR    = os.path.join(MODELS_DIR, "best")
 
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
-os.makedirs(BEST_DIR,   exist_ok=True)
 
 file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of the path
 args = parse_arguments_from_ini(file_config_path)
