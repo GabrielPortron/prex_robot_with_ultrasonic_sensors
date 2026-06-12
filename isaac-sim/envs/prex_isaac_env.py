@@ -380,9 +380,9 @@ class PrexIsaacEnv(gym.Env):
         self.needed_control = False
         self.controlled_speed = 0.0
 
-        self.launch()
+        self.__launch()
 
-    def launch(self) -> None:
+    def __launch(self) -> None:
         """Launches Isaac Sim in headless mode, builds the scene, and
         initialises the physics simulation. Called once automatically by
         __init__. Do not call manually.
@@ -438,7 +438,7 @@ class PrexIsaacEnv(gym.Env):
         self.robot = Create3Robot(world=self.world, prim_path="/World/create_3")
         self.robot.load()
 
-        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, fov=180)
+        self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, lateral_sensors_angle=180)
 
         self.world.reset()
         self.robot.initialize()
