@@ -35,6 +35,8 @@ parser.add_argument("--model",    type=str, required=True,
                     help="Path to the saved model zip (without .zip extension)")
 parser.add_argument("--weight",    type=int, required=True,
                     help="'Age' of the model")
+parser.add_argument("--nb_episode",    type=int, required=True,
+                    help="Number of episodes for the evaluation")
 args_main = parser.parse_args()
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -258,7 +260,7 @@ else:
     timesteps = 0
     save_on_episodes = args["save_on_episode"]
 
-    for eps in range (10):
+    for eps in range (args_main.nb_episodes):
 
         obs, _ = env.reset()
 
