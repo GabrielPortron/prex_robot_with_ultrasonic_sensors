@@ -25,7 +25,7 @@ parser.add_argument("--no-wandb", action="store_true",
 parser.add_argument("--cube", type=int, required=True,
                     help="Enter the number of cube you want to spawn for the training")
 parser.add_argument("--arena", action="store_true",
-                    help="The training will take place in 2.0x2.0 m2 arena")
+                    help="The training will take place in an arena")
 parser.add_argument("--ppo", action="store_true",
                     help="Change the training algorithm from SAC to PPO")
 args_main = parser.parse_args()
@@ -45,9 +45,6 @@ last_mod_time = os.path.getmtime(file_config_path)
 # args_main.no_wandb = True 
 # args_main.cube = 1
 # args_main.arena = True  
-
-TOTAL_TIMESTEPS = 5_000_000
-CHECKPOINT_FREQ = 100_000
 
 device = "cuda"
 
@@ -97,10 +94,12 @@ if args_main.ppo:
         verbose=args["verbose"],
         ppo=True,
         cube=args_main.cube,
-        arena=False,
+        borderless_perimeter=args["borderless_perimeter"],
+        cube_dimension=args["cube_dimension"],
+        arena=args_main.arena,
+        arena_geometry=args["arena_geometry"],
         repeating_action=args["repeating_action"],
         device=device,
-        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
     )
 
     monitored_env = Monitor(env, filename=os.path.join(LOGS_DIR, "monitor.csv"))
@@ -124,7 +123,7 @@ if args_main.ppo:
         wandb.init(
             project="prex_ultrasonic-sac",
             name=RUN_NAME,
-            config={**PPO_CONFIG, "total_timesteps": TOTAL_TIMESTEPS},
+            config={**PPO_CONFIG, "total_timesteps": args["total_simulation_timesteps"]},
             sync_tensorboard=True,
             save_code=True,
         )
@@ -132,7 +131,7 @@ if args_main.ppo:
 
     callbacks.append(
         CheckpointCallback(
-            save_freq=CHECKPOINT_FREQ,
+            save_freq=100_000,
             save_path=MODELS_DIR,
             name_prefix="prex_ultrasonic_robot_policy",
             verbose=1
@@ -162,7 +161,7 @@ if args_main.ppo:
     print("--- [Training with PPO] ---")
     try:
         model.learn(
-            total_timesteps=TOTAL_TIMESTEPS,
+            total_timesteps=args["total_simulation_timesteps"],
             callback=callback,
             reset_num_timesteps=True,
             progress_bar=True
@@ -195,10 +194,12 @@ else:
         verbose=args["verbose"],
         ppo=False,
         cube=args_main.cube,
+        borderless_perimeter=args["borderless_perimeter"],
+        cube_dimension=args["cube_dimension"],
         arena=args_main.arena,
+        arena_geometry=args["arena_geometry"],
         repeating_action=args["repeating_action"],
         device=device,
-        arena_geometry=[(2.0, 2.0), 0.2, 0.5],
     )
 
     print("[Training] ... Environment created")
@@ -269,7 +270,7 @@ else:
 
     obs, _ = env.reset()
 
-    for _ in range (TOTAL_TIMESTEPS):
+    for _ in range (args["total_simulation_timesteps"]):
         entropy = 0
 
         if timesteps < collect_random_timesteps:
