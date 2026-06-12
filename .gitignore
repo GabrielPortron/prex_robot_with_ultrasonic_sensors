@@ -4,6 +4,7 @@ wandb
 test
 logs
 results*.txt
+reward*
 *.csv
 *.out
 *.pth
