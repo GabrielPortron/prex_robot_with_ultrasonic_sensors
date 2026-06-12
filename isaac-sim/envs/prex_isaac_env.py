@@ -134,9 +134,9 @@ class State:
                 self.state_high.append(bound)
             self.state_length += 3
         
-        if self.controller is not None:
-            self.state_low.append(-self.controller)
-            self.state_high.append(self.controller)
+        if self.controller:
+            self.state_low.append(0)
+            self.state_high.append(1)
             self.state_length += 1
 
         self.state_low  = np.array(self.state_low,  dtype=np.float32)
@@ -228,6 +228,7 @@ class PrexIsaacEnv(gym.Env):
             borderless_perimeter: list = (5.0, 5.0),
             arena_geometry: list = [(2.0, 2.0), 0.2, 0.5],
             arena: bool = False,
+            activate_controller: bool = True,
             repeating_action: int = 1,
             device: str = "cuda",
             seed: int = None,
@@ -305,6 +306,7 @@ class PrexIsaacEnv(gym.Env):
         self.nb_cube            = cube
         self.borderless_perimeter = borderless_perimeter
         self.has_arena          = arena
+        self.activate_controller = activate_controller
         self.repeating_action   = repeating_action
         self.device             = device
         self.seed               = seed
@@ -321,11 +323,11 @@ class PrexIsaacEnv(gym.Env):
 
         self.state = State(
             sensors={
-                "front": 20.0, "back": 20.0,
-                "left":  20.0, "right": 20.0,
+                "front": 6.0, "back": 6.0,
+                "left":  6.0, "right": 6.0,
             },
             position={
-                "x": 2.0, "y": 2.0, "z": 2.0,
+                "x": np.inf, "y": np.inf, "z": np.inf,
             },
             orientation={
                 "roll": None, "pitch": None, "yaw": math.pi,
@@ -336,8 +338,8 @@ class PrexIsaacEnv(gym.Env):
             angular_speed={
                 "wx": None, "wy": None, "wz": self.max_angular_speed,
             },
-            heading_vec=(1.0, 1.0, 100.0),
-            controller=1
+            heading_vec=(1.0, 1.0, math.pi),
+            controller=True
         )
         self.state.init_spaces()
         self.observation_space = self.state.get_observation_space()
@@ -556,7 +558,9 @@ class PrexIsaacEnv(gym.Env):
         """
         self.step_counter += 1
 
-        action = self.controller(action)
+        if self.activate_controller:
+            action = self.controller(action)
+
         self.action       = action
         self.last_action  = action
         self.last_position = self.position
