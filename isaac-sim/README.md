@@ -16,7 +16,7 @@ A reinforcement learning project implementing Soft Actor-Critic (SAC) and Proxim
 
 ## Project Overview
 
-This project trains an **iRobot Create3** differential-drive robot to autonomously navigate toward the center of an arena using simulated ultrasonic sensors. The robot is trained entirely in **Isaac Sim** (NVIDIA's physics simulator), with the option to use either a custom SAC implementation or Stable Baselines3's PPO.
+This project trains an [**iRobot Create3**](https://iroboteducation.github.io/create3_docs/) differential-drive robot to autonomously navigate toward the center of an arena using simulated ultrasonic sensors. The robot is trained entirely in **Isaac Sim** (NVIDIA's physics simulator), with the option to use either a custom SAC implementation or Stable Baselines3's PPO.
 
 Features include:
 
@@ -25,7 +25,7 @@ Features include:
 - **Ultrasonic Sensors**: Up to 4 simulated sensors using PhysX raycasting (no GPU rendering needed)
 - **Obstacle Support**: Configurable number of randomly-placed cube obstacles, repositioned each episode
 - **Safety Controller**: Hard-coded obstacle avoidance layer that overrides the policy when a sensor reading is critically low
-- **Experiment Tracking**: Weights & Biases (wandb) integration
+- **Experiment Tracking**: Weights & Biases (wandb) integration. API key: wandb_v1_ENiYjBqpCU3supN6fawI41r1ZTh
 
 ---
 
@@ -38,7 +38,7 @@ Features include:
   - Cannot move sideways
 - Up to 4 simulated ultrasonic sensors: front, back, left, right
 - Sensor range: 0.30 m (minimum) to 6.0 m (maximum)
-- Arena: Optional 2×2 m square enclosure with static walls
+- Arena: Optional L1xL2 m square enclosure with static walls
 - Goal: World origin (centre of the arena)
 
 **State Space (Observations):**
@@ -47,19 +47,21 @@ The observation is a 14-dimensional vector assembled in this order:
 
 | Index | Component | Bounds | Description |
 |---|---|---|---|
-| 0–3 | `d_front, d_back, d_left, d_right` | ±20.0 m | Ultrasonic sensor distances |
-| 4–6 | `x, y, z` | ±2.0 m | Robot world-frame position |
+| 0–3 | `d_front, d_back, d_left, d_right` | ±6.0 m | Ultrasonic sensor distances |
+| 4–6 | `x, y, z` | ±inf m | Robot world-frame position |
 | 7 | `yaw` | ±π rad | Robot heading |
 | 8 | `vx` | ±0.5 m/s | Forward linear speed |
 | 9 | `wz` | ±0.5 rad/s | Yaw rate |
 | 10 | `cos(yaw)` | ±1.0 | Heading vector x-component |
 | 11 | `sin(yaw)` | ±1.0 | Heading vector y-component |
-| 12 | `delta` | ±100 rad | Angle between heading and goal direction |
-| 13 | `controller_flag` | ±1 | 1 if the safety controller fired this step |
+| 12 | `delta` | ±π rad | Angle between heading and goal direction |
+| 13 | `controller_flag` | True or False | True if the safety controller fired this step |
+
+> **Note for the `x, y, z` components**: The bounds are set to `±inf` but the robot will actually never reach high values. It is just a convention for the creation of the state.
 
 **Action Space:**
-- 2D continuous: `[linear_velocity, angular_velocity]`
-- Bounds: linear ∈ [−0.5, 0.5] m/s, angular ∈ [−0.5, 0.5] rad/s (set in `config.ini`)
+- 2D continuous: `[Vx, Wz]`
+- Bounds: Vx ∈ [−0.5, 0.5] m/s, Wz ∈ [−0.5, 0.5] rad/s (set in `config.ini`)
 
 **Episode Termination:**
 
@@ -69,7 +71,7 @@ The observation is a 14-dimensional vector assembled in this order:
 | Robot flips (`z > 0.40 m`) or leaves bounds | `terminated` | −0.5 |
 | `step_counter ≥ max_steps` (200) | `truncated` | −0.5 |
 
-The robot is spawned at a **random position and heading** inside the arena at the start of each episode. Cube obstacles (if any) are also randomly repositioned each episode, always away from the robot start position and the goal.
+The robot is spawned at a **random position** (see [The Training Area](#the-training-area)) **and heading** at the start of each episode. Cube obstacles (if any) are also randomly repositioned each episode, always away from the robot start position and the goal.
 
 **Safety Controller:**
 
@@ -85,6 +87,7 @@ A hard-coded layer runs inside every `step()` call, before the policy action rea
 - The `env_isaaclab` virtual environment sourced in your shell
 
 ### Setup
+0. **Create the Isaac Lab environment:**
 
 1. **Source the Isaac Lab environment:**
    ```bash
@@ -113,46 +116,46 @@ Before running a simulation, several components can be tuned to match your exper
 
 ### The State
 
-The state is a major component in reinforcement learning — it defines what information the robot has access to at each timestep. Modifying it is a two-step process.
+The state is a major component in reinforcement learning — it defines what information the agent has access to at each timestep. Modifying it is a two-step process.
 
 **Step 1 — Initialisation:** In the `__init__` method of `PrexIsaacEnv`, the state is declared as follows:
 
 ```python
-self.state = State(
+state = State(
     sensors={
-        "front": 20.0, "back": 20.0,
-        "left":  20.0, "right": 20.0,
+        "front": 6.0, "back": 6.0,
+        "left":  6.0, "right": 6.0,
     },
     position={
-        "x": 2.0, "y": 2.0, "z": 2.0,
+        "x": inf, "y": 2.inf, "z": inf,
     },
     orientation={
-        "roll": None, "pitch": None, "yaw": math.pi,
+        "roll": None, "pitch": None, "yaw": π,
     },
     linear_speed={
-        "vx": self.max_linear_speed, "vy": None, "vz": None,
+        "vx": max_linear_speed, "vy": None, "vz": None,
     },
     angular_speed={
-        "wx": None, "wy": None, "wz": self.max_angular_speed,
+        "wx": None, "wy": None, "wz": max_angular_speed,
     },
-    heading_vec=(1.0, 1.0, 100.0),
-    controller=1
+    heading_vec=(1.0, 1.0, π),
+    controller=True
 )
 ```
 
-Each component can be enabled by setting its bound value (refer to the table in [Environment Details](#environment-details)), or disabled by setting it to `None`. Make sure to respect the expected type for each field — for example, `heading_vec` is a tuple of 3 elements, so to disable it entirely use `heading_vec=(None, None, None)`.
+Each component can be enabled by setting its bound value (refer to the table in [Environment Details](#environment-details)), or disabled by setting it to `None`. Make sure to respect the expected type for each field — for example, `heading_vec` is a tuple of 3 elements, so to disable it you just need to do:`heading_vec=None`. For the controller, it's a bit different: just set it to `True` or `False`.
 
 **Step 2 — Reading the state:** In the `read_state` method, the state is populated at each step:
 
 ```python
-self.state.update_state(
-    sensors=full_sensors,
-    position=self.position,
-    orientation=np.array([self.theta]),
-    linear_speed=np.array([self.linear_speed]),
-    angular_speed=np.array([self.angular_speed]),
-    heading_vec=np.concatenate([self.heading_vec, [self.delta]]),
-    controller=np.array([int(self.needed_control)])
+sstate.update_values(
+    sensors=sensors,
+    position=position,
+    orientation=np.array([yaw]),
+    linear_speed=np.array([linear_speed]),
+    angular_speed=np.array([angular_speed]),
+    heading_vec=np.concatenate([heading_vec, [delta]]),
+    controller=np.array([needed_control])
 )
 ```
 
@@ -162,14 +165,14 @@ This is where you decide what data is actually written into the state vector at 
 
 Two training configurations are supported.
 
-**With arena (`--arena`):** The robot is confined inside a physical 2×2 m walled enclosure. Wall dimensions can be adjusted in `train_isaac.py` when creating the environment:
+**With arena (`--arena`):** The robot is confined inside a physical L1×L2 m square walled enclosure. Wall dimensions can be adjusted in `config.ini` before starting a simulation:
 ```python
-arena_geometry=[(2.0, 2.0), 0.2, 0.5]  # (perimeter), wall depth, wall height
+arena_geometry = [(L1, L2), 0.2, 0.5]  # (perimeter), wall depth, wall height
 ```
 
-**Without arena:** The robot spawns inside a virtual 5×5 m region with no physical borders. The robot can wander outside this region during training — it only defines the spawn area. This size can be adjusted in the `__init__` method of `PrexIsaacEnv`:
+**Without arena:** The robot spawns inside a virtual L1×L2 m squared region with no physical borders. The robot can wander outside this region during training — it only defines the spawn area. This size can be adjusted in `config.ini`:
 ```python
-self.perimeter = np.array([5.0, 5.0])
+borderless_perimeter = (L1, L2)
 ```
 
 ### Cube Obstacles
@@ -178,27 +181,20 @@ The number of cube obstacles is specified at launch time via the `--cube` argume
 
 The only practical limit on the number of cubes is the available space: the placement algorithm loops until it finds a valid non-overlapping position for each cube, so placing too many in a small area can cause the program to hang. In a 5×5 m area, no more than around 10 cubes is recommended.
 
-Cube size (default 0.3×0.3×0.3 m) can be changed in the `launch` method of `PrexIsaacEnv`:
+Cube dimension can be changed in `config.ini`:
 ```python
-self.cube = Cube(
-    world=self.world,
-    nb_cube=self.nb_cube,
-    scale=(0.3, 0.3, 0.3),
-    perimeter=self.perimeter,
-)
+cube_dimension = 0.3    #Default value
 ```
 
 ### Sensors
 
-By default, the four sensors are orthogonal (each facing perpendicular to the others), which corresponds to `fov=180`. Reducing this value rotates the left and right sensors toward the front, effectively giving the robot a wider forward field of view at the cost of rear coverage. For example, `fov=60` places all three non-rear sensors within a 60° frontal cone. This setting can be changed in the `launch` method of `PrexIsaacEnv`:
+By default, the four sensors are orthogonal (each facing perpendicular to the others), which corresponds to `lateral_sensors_angle=180`. Reducing this value rotates the left and right sensors toward the front.The agent then has more information about what's in front of him but loses on its sides. For example, `lateral_sensors_angle=60` places the two lateral sensors in a 60° frontal cone centered on the front sensor, unmoved. This only has an effect when using all four sensors.
+
+The physical simulation of each sensor (cone angle and number of rays) can also be tuned in `config.ini`: 
 
 ```python
-self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, fov=180)
+sensor_config = (180.0, 15.0, 5) #lateral_sensors_angle / sensor_cone_angle / nb_of_rays
 ```
-
-This only has an effect when using all four sensors.
-
-The physical simulation of each sensor (cone angle and number of rays) can also be tuned. By default, each sensor casts 5 rays spread over a 15° cone. These values can be changed in the `_cone_raycast` method of `ultrasonic_sensors.py`. If you change them, make sure to apply the same values in `draw_rays` so the viewport visualisation stays consistent.
 
 ---
 
@@ -212,7 +208,7 @@ The physical simulation of each sensor (cone angle and number of rays) can also 
 uv run train_isaac.py --cube <N>
 ```
 
-Add `--arena` to enclose the scene with 2×2 m walls (recommended):
+Add `--arena` to enclose the scene with L1×L2 m walls:
 
 ```bash
 uv run train_isaac.py --cube 0 --arena
@@ -234,13 +230,13 @@ uv run train_isaac.py --cube 1 --arena --ppo
 ### Evaluate / Record a Trained SAC Model
 
 ```bash
-uv run play_isaac.py --cube 2 --model <run_name> --weight <checkpoint>
+uv run evaluate_isaac.py --nb_episodes 10 --cube 2 --model <run_name> --weight <checkpoint>
 ```
-
+- `--nb_episodes` is the number of episodes you want to evaluate your model.
 - `--model` is the run folder name inside `models/` (e.g. `20260323_113058`)
-- `--weight` is the episode number in the checkpoint filename (e.g. `3600` for `prex_ultrasonic_robot_policy_3600_weights.pth`)
+- `--weight` is the model number (e.g. `3600` for `prex_ultrasonic_robot_policy_3600_weights.pth`)
 
-After 10 evaluation episodes a video is compiled at `records/episode_<model_name>.mp4`. To copy it to your local machine:
+After `nb_episodes` evaluation episodes a video is compiled at `records/episode_<model_name>.mp4`. To copy it to your local machine:
 
 ```bash
 scp <user>@<server_ip>:<video_path> ~/Downloads/
