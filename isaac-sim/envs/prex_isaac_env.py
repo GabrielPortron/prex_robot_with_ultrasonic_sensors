@@ -226,6 +226,7 @@ class PrexIsaacEnv(gym.Env):
             max_episode_length: int = 1000,
             max_linear_speed: float = 0.7,
             max_angular_speed: float = 0.4,
+            target_point: tuple = (0.0, 0.0),
             radius_target: float = 0.3,
             physics_dt: float = 1.0 / 60.0,
             rendering_dt: float = 1.0,
@@ -307,6 +308,7 @@ class PrexIsaacEnv(gym.Env):
         self.max_episode_length = max_episode_length
         self.max_linear_speed   = max_linear_speed
         self.max_angular_speed  = max_angular_speed
+        self.target_point = target_point
         self.radius_target      = radius_target
         self.physics_dt         = physics_dt
         self.rendering_dt       = rendering_dt
@@ -355,7 +357,7 @@ class PrexIsaacEnv(gym.Env):
         self.state.init_spaces()
         self.observation_space = self.state.get_observation_space()
 
-        self.goal            = np.zeros(2,  dtype=np.float32)
+        self.goal            = np.array([self.target_point])
         self.dist            = 0.0
         self.theta           = 0.0
         self.linear_speed    = 0.0

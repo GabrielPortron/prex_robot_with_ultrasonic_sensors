@@ -10,6 +10,8 @@ A reinforcement learning project implementing Soft Actor-Critic (SAC) and Proxim
 - [Usage](#usage)
 - [Project Structure](#project-structure)
 - [Configuration](#configuration)
+- [Towards a Real Robot](#towards-a-real-robot)
+- [Installing Isaac Sim and Isaac Lab](#installing-isaac-sim-and-isaac-lab)
 - [Troubleshooting](#troubleshooting)
 
 ---
@@ -25,7 +27,7 @@ Features include:
 - **Ultrasonic Sensors**: Up to 4 simulated sensors using PhysX raycasting (no GPU rendering needed)
 - **Obstacle Support**: Configurable number of randomly-placed cube obstacles, repositioned each episode
 - **Safety Controller**: Hard-coded obstacle avoidance layer that overrides the policy when a sensor reading is critically low
-- **Experiment Tracking**: Weights & Biases (wandb) integration. API key: wandb_v1_ENiYjBqpCU3supN6fawI41r1ZTh
+- **Experiment Tracking**: Weights & Biases (wandb) integration
 
 ---
 
@@ -38,7 +40,7 @@ Features include:
   - Cannot move sideways
 - Up to 4 simulated ultrasonic sensors: front, back, left, right
 - Sensor range: 0.30 m (minimum) to 6.0 m (maximum)
-- Arena: Optional L1xL2 m square enclosure with static walls
+- Arena: Optional L1×L2 m square enclosure with static walls
 - Goal: World origin (centre of the arena)
 
 **State Space (Observations):**
@@ -48,16 +50,16 @@ The observation is a 14-dimensional vector assembled in this order:
 | Index | Component | Bounds | Description |
 |---|---|---|---|
 | 0–3 | `d_front, d_back, d_left, d_right` | ±6.0 m | Ultrasonic sensor distances |
-| 4–6 | `x, y, z` | ±inf m | Robot world-frame position |
+| 4–6 | `x, y, z` | ±inf | Robot world-frame position |
 | 7 | `yaw` | ±π rad | Robot heading |
 | 8 | `vx` | ±0.5 m/s | Forward linear speed |
 | 9 | `wz` | ±0.5 rad/s | Yaw rate |
 | 10 | `cos(yaw)` | ±1.0 | Heading vector x-component |
 | 11 | `sin(yaw)` | ±1.0 | Heading vector y-component |
 | 12 | `delta` | ±π rad | Angle between heading and goal direction |
-| 13 | `controller_flag` | True or False | True if the safety controller fired this step |
+| 13 | `controller_flag` | True/False | True if the safety controller fired this step |
 
-> **Note for the `x, y, z` components**: The bounds are set to `±inf` but the robot will actually never reach high values. It is just a convention for the creation of the state.
+> **Note on `x, y, z` bounds:** Bounds are set to `±inf` because the `State` class uses them only to define the Gymnasium `Box` space; the robot will never actually reach large values during training.
 
 **Action Space:**
 - 2D continuous: `[Vx, Wz]`
@@ -71,7 +73,7 @@ The observation is a 14-dimensional vector assembled in this order:
 | Robot flips (`z > 0.40 m`) or leaves bounds | `terminated` | −0.5 |
 | `step_counter ≥ max_steps` (200) | `truncated` | −0.5 |
 
-The robot is spawned at a **random position** (see [The Training Area](#the-training-area)) **and heading** at the start of each episode. Cube obstacles (if any) are also randomly repositioned each episode, always away from the robot start position and the goal.
+The robot is spawned at a **random position and heading** at the start of each episode. Cube obstacles (if any) are also randomly repositioned each episode, always away from the robot start position and the goal.
 
 **Safety Controller:**
 
@@ -83,11 +85,14 @@ A hard-coded layer runs inside every `step()` call, before the policy action rea
 
 ### Prerequisites
 - Python 3.10+
-- Isaac Sim (installed and licensed)
-- The `env_isaaclab` virtual environment sourced in your shell
+- Isaac Sim (installed and licensed) — see [Installing Isaac Sim and Isaac Lab](#installing-isaac-sim-and-isaac-lab)
+- The `env_isaaclab` virtual environment
 
 ### Setup
-0. **Create the Isaac Lab environment:**
+
+0. **Create the Isaac Lab environment** (first time only):
+
+   Follow the [Isaac Lab installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html) to create the `env_isaaclab` virtual environment. See [Installing Isaac Sim and Isaac Lab](#installing-isaac-sim-and-isaac-lab) for a summary.
 
 1. **Source the Isaac Lab environment:**
    ```bash
@@ -127,10 +132,10 @@ state = State(
         "left":  6.0, "right": 6.0,
     },
     position={
-        "x": inf, "y": 2.inf, "z": inf,
+        "x": inf, "y": inf, "z": inf,
     },
     orientation={
-        "roll": None, "pitch": None, "yaw": π,
+        "roll": None, "pitch": None, "yaw": math.pi,
     },
     linear_speed={
         "vx": max_linear_speed, "vy": None, "vz": None,
@@ -138,17 +143,17 @@ state = State(
     angular_speed={
         "wx": None, "wy": None, "wz": max_angular_speed,
     },
-    heading_vec=(1.0, 1.0, π),
+    heading_vec=(1.0, 1.0, math.pi),
     controller=True
 )
 ```
 
-Each component can be enabled by setting its bound value (refer to the table in [Environment Details](#environment-details)), or disabled by setting it to `None`. Make sure to respect the expected type for each field — for example, `heading_vec` is a tuple of 3 elements, so to disable it you just need to do:`heading_vec=None`. For the controller, it's a bit different: just set it to `True` or `False`.
+Each component can be enabled by setting its bound value (refer to the table in [Environment Details](#environment-details)), or disabled by setting it to `None`. Make sure to respect the expected type for each field — for example, `heading_vec` is a tuple of 3 elements, so to disable it entirely use `heading_vec=None`. For the controller flag, set it to `True` to include it or `False` to exclude it.
 
 **Step 2 — Reading the state:** In the `read_state` method, the state is populated at each step:
 
 ```python
-sstate.update_values(
+state.update_values(
     sensors=sensors,
     position=position,
     orientation=np.array([yaw]),
@@ -165,13 +170,13 @@ This is where you decide what data is actually written into the state vector at 
 
 Two training configurations are supported.
 
-**With arena (`--arena`):** The robot is confined inside a physical L1×L2 m square walled enclosure. Wall dimensions can be adjusted in `config.ini` before starting a simulation:
-```python
-arena_geometry = [(L1, L2), 0.2, 0.5]  # (perimeter), wall depth, wall height
+**With arena (`--arena`):** The robot is confined inside a physical L1×L2 m walled enclosure. Wall dimensions can be adjusted in `config.ini` before starting a simulation:
+```ini
+arena_geometry = [(L1, L2), wall_depth, wall_height]
 ```
 
-**Without arena:** The robot spawns inside a virtual L1×L2 m squared region with no physical borders. The robot can wander outside this region during training — it only defines the spawn area. This size can be adjusted in `config.ini`:
-```python
+**Without arena:** The robot spawns inside a virtual L1×L2 m region with no physical borders. The robot can wander outside this region during training — it only defines the spawn area. This size can be adjusted in `config.ini`:
+```ini
 borderless_perimeter = (L1, L2)
 ```
 
@@ -181,19 +186,19 @@ The number of cube obstacles is specified at launch time via the `--cube` argume
 
 The only practical limit on the number of cubes is the available space: the placement algorithm loops until it finds a valid non-overlapping position for each cube, so placing too many in a small area can cause the program to hang. In a 5×5 m area, no more than around 10 cubes is recommended.
 
-Cube dimension can be changed in `config.ini`:
-```python
-cube_dimension = 0.3    #Default value
+Cube size can be changed in `config.ini`:
+```ini
+cube_dimension = 0.3    # side length in metres (default)
 ```
 
 ### Sensors
 
-By default, the four sensors are orthogonal (each facing perpendicular to the others), which corresponds to `lateral_sensors_angle=180`. Reducing this value rotates the left and right sensors toward the front.The agent then has more information about what's in front of him but loses on its sides. For example, `lateral_sensors_angle=60` places the two lateral sensors in a 60° frontal cone centered on the front sensor, unmoved. This only has an effect when using all four sensors.
+By default, the four sensors are orthogonal (each facing perpendicular to the others), which corresponds to `lateral_sensors_angle=180`. Reducing this value rotates the left and right sensors toward the front — the agent then has more information about what is ahead but loses coverage on the sides. For example, `lateral_sensors_angle=60` places the two lateral sensors within a 60° cone centred on the front direction. This only has an effect when using all four sensors.
 
-The physical simulation of each sensor (cone angle and number of rays) can also be tuned in `config.ini`: 
+All sensor physics parameters can be tuned in `config.ini`:
 
-```python
-sensor_config = (180.0, 15.0, 5) #lateral_sensors_angle / sensor_cone_angle / nb_of_rays
+```ini
+sensor_config = (180.0, 15.0, 5)  # lateral_sensors_angle / cone_angle / nb_rays
 ```
 
 ---
@@ -232,11 +237,12 @@ uv run train_isaac.py --cube 1 --arena --ppo
 ```bash
 uv run evaluate_isaac.py --nb_episodes 10 --cube 2 --model <run_name> --weight <checkpoint>
 ```
-- `--nb_episodes` is the number of episodes you want to evaluate your model.
-- `--model` is the run folder name inside `models/` (e.g. `20260323_113058`)
-- `--weight` is the model number (e.g. `3600` for `prex_ultrasonic_robot_policy_3600_weights.pth`)
 
-After `nb_episodes` evaluation episodes a video is compiled at `records/episode_<model_name>.mp4`. To copy it to your local machine:
+- `--nb_episodes` is the number of episodes to run
+- `--model` is the run folder name inside `models/` (e.g. `20260323_113058`)
+- `--weight` is the episode checkpoint number (e.g. `3600` for `prex_ultrasonic_robot_policy_3600_weights.pth`)
+
+After all evaluation episodes, a video is compiled at `records/episode_<model_name>.mp4`. To copy it to your local machine:
 
 ```bash
 scp <user>@<server_ip>:<video_path> ~/Downloads/
@@ -245,7 +251,7 @@ scp <user>@<server_ip>:<video_path> ~/Downloads/
 ### Evaluate a Trained PPO Model
 
 ```bash
-uv run play_isaac.py --cube 1 --model <run_name> --weight 0 --ppo
+uv run evaluate_isaac.py --nb_episodes 10 --cube 1 --model <run_name> --weight 0 --ppo
 ```
 
 > For PPO, `--weight` is ignored — the final model is always loaded from `models/<run_name>/ppo_prex_final.zip`, alongside `vec_normalize.pkl` for observation normalisation statistics.
@@ -274,7 +280,7 @@ isaac-sim/
 ├── utils/
 │   └── utils.py                      # ReplayBuffer, config parser, geometry helpers
 ├── train_isaac.py                    # Training entry point (SAC or PPO)
-├── play_isaac.py                     # Evaluation and video recording entry point
+├── evaluate_isaac.py                 # Evaluation and video recording entry point
 ├── config.ini                        # All hyperparameters and run settings
 └── requirements.txt                  # Python dependencies
 ```
@@ -283,22 +289,25 @@ isaac-sim/
 
 ## Configuration
 
-Edit `config.ini` to adjust hyperparameters. The `[DEFAULT]` section contains values that are fixed for the task. The `[MODIFIABLE]` section contains values intended to be tuned — they can also be **hot-reloaded during training** without restarting (the file is polled for changes each episode).
+Edit `config.ini` to adjust hyperparameters. All values can be **hot-reloaded during SAC training** without restarting — the file is polled for changes at the end of each episode.
 
-### [DEFAULT]
+### [ENV]
 
 | Key | Default | Description |
 |---|---|---|
-| `max_steps` | 200 | Max steps per episode before truncation |
 | `max_linear_speed` | 0.5 | Action bound for linear velocity (m/s) |
 | `max_angular_speed` | 0.5 | Action bound for angular velocity (rad/s) |
+| `repeating_action` | 20 | Physics steps simulated per `env.step()` call |
+| `radius_target` | 0.2 | Goal acceptance radius (m) |
+| `borderless_perimeter` | (5.0, 5.0) | Robot and cube spawn region when not using arena (m) |
+| `cube_dimension` | 0.3 | Side length of each cube obstacle (m) |
+| `arena_geometry` | [(2.0, 2.0), 0.2, 0.5] | Arena inner dimensions, wall depth, wall height (m) |
+| `sensor_config` | (180.0, 15.0, 5) | Lateral sensor angle (°), cone angle (°), rays per sensor |
 
-### [MODIFIABLE]
+### [ALGORITHM]
 
 | Key | Default | Description |
 |---|---|---|
-| `repeating_action` | 20 | Physics steps simulated per `env.step()` call |
-| `radius_target` | 0.2 | Goal acceptance radius (m) |
 | `replay_buffer_size` | 50,000 | SAC replay buffer capacity (transitions) |
 | `batch_size` | 256 | SAC training mini-batch size |
 | `actor_lr` | 0.0005 | Actor network learning rate |
@@ -306,12 +315,67 @@ Edit `config.ini` to adjust hyperparameters. The `[DEFAULT]` section contains va
 | `gamma` | 0.99 | Discount factor |
 | `tau` | 0.005 | Polyak averaging coefficient for target networks |
 | `alpha` | 0.2 | Initial entropy temperature |
-| `alpha_decay_rate` | 0.9999 | Per-episode multiplicative decay for alpha |
+| `alpha_decay_rate` | 0.999 | Per-episode multiplicative decay for alpha |
 | `min_alpha` | 0.05 | Minimum entropy temperature |
+
+### [SIMULATION]
+
+| Key | Default | Description |
+|---|---|---|
+| `physics_dt` | 1/60 | The timestep between each new physical iteration in IsaacSim |
+| `rendering_dt` | 1.0 | The timestep between each render iteration in IsaacSim. When training, it is recommended to keep it equal or above 1.0 (no render) |
+| `max_steps` | 200 | Max steps per episode before truncation |
 | `collect_random_steps` | 1000 | Steps of random exploration before SAC training begins |
 | `save_on_episode` | 300 | SAC checkpoint frequency (in episodes) |
+| `total_simulation_timesteps` | 2,000,000 | Total environment steps for a training run |
 
 > **Note on `repeating_action`:** With `physics_dt = 1/60 s` and `repeating_action = 20`, each environment step corresponds to roughly 333 ms of simulated time. The robot has significant momentum between decisions. Lowering this value makes control more responsive but slows down wall-clock training time.
+
+---
+
+## Towards a Real Robot
+
+This project currently has **no ROS 2 implementation** — all training and evaluation runs entirely inside Isaac Sim. The long-term goal is to deploy the trained policy on a physical iRobot Create3 using ROS 2.
+
+The planned pipeline is:
+1. Train the policy in Isaac Sim (this project)
+2. Export the policy weights (already saved as `.pth` files)
+3. Write a ROS 2 node that subscribes to the real ultrasonic sensor topic and the odometry topic, assembles the same state vector used during training, runs a forward pass through the policy network, and publishes the resulting `[Vx, Wz]` command as a `geometry_msgs/Twist` message on `/cmd_vel`
+
+The Create3 already communicates via ROS 2 out of the box, and the sensor/odometry topic names are already referenced in the legacy `config.ini` fields (`topic_sensor`, `topic_odom`, `topic_pub`). The main sim-to-real challenge will be the **domain gap**: the simulated sensors use idealised raycasting, while real ultrasonic sensors have noise, blind spots, and multi-path reflections.
+
+---
+
+## Installing Isaac Sim and Isaac Lab
+
+### Isaac Sim
+
+Isaac Sim is NVIDIA's physics simulation platform, required to run this project. It requires a compatible NVIDIA GPU and driver.
+
+- **Download and installation guide:** https://docs.isaacsim.omniverse.nvidia.com/latest/installation/install_workstation.html
+- **System requirements:** https://docs.isaacsim.omniverse.nvidia.com/latest/installation/requirements.html
+
+Isaac Sim can be installed either through the **Omniverse Launcher** (recommended for a first install) or via a **pip-based installation** inside a Python environment.
+
+### Isaac Lab
+
+Isaac Lab is the reinforcement learning framework built on top of Isaac Sim. It provides the Python environment interface (`gymnasium`-compatible) and the `env_isaaclab` virtual environment used to run this project.
+
+- **Installation guide:** https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html
+- **GitHub repository:** https://github.com/isaac-sim/IsaacLab
+
+The key step after installing Isaac Sim is to run Isaac Lab's setup script, which creates the `env_isaaclab` virtual environment with all required dependencies:
+
+```bash
+# From the IsaacLab repository root:
+./isaaclab.sh --install
+```
+
+Once created, activate it before running any script in this project:
+
+```bash
+source /home/<user>/env_isaaclab/bin/activate
+```
 
 ---
 
