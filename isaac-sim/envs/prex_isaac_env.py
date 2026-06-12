@@ -234,6 +234,7 @@ class PrexIsaacEnv(gym.Env):
             ppo: bool = False,
             cube: int = 0,
             cube_dimension: float = 0.3,
+            dist_objects: float = 0.2,
             borderless_perimeter: list = (5.0, 5.0),
             arena_geometry: list = [(2.0, 2.0), 0.2, 0.5],
             arena: bool = False,
@@ -316,6 +317,7 @@ class PrexIsaacEnv(gym.Env):
         self.ppo                = ppo
         self.nb_cube            = cube
         self.cube_dimension = cube_dimension
+        self.dist_objects       = dist_objects
         self.borderless_perimeter = borderless_perimeter
         self.has_arena          = arena
         self.sensor_config = sensor_config
@@ -390,7 +392,7 @@ class PrexIsaacEnv(gym.Env):
         self.arena   = None
         self.robot   = None
         self.sensors = None
-        self.cube    = None
+        self.cubes    = None
 
         self.needed_control = False
         self.controlled_speed = 0.0
@@ -527,10 +529,12 @@ class PrexIsaacEnv(gym.Env):
         self.read_state()
         self.prev_dist = self.dist
 
-        self.cube.set_up_all_cubes(
+        self.cubes.set_up_all_cubes(
+            target_position=self.goal,
             target_radius=self.radius_target,
             robot_position=self.position[:2],
             robot_size=0.4,
+            distance_between_objects=self.dist_objects,
             nb_cubes=self.nb_cube
         )
 

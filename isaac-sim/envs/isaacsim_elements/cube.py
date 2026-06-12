@@ -86,7 +86,8 @@ class Cube:
             cube,
             target_radius: float,
             obstacle_positions: list,
-            robot_size: float
+            robot_size: float,
+            distance_between_objects: float,
     ) -> np.ndarray:
         """Repositions a single cube to a random valid location that avoids
         all known obstacles.
@@ -119,22 +120,24 @@ class Cube:
         cube_yaw = np.random.uniform(-math.pi, math.pi)
         cube_orientation = np.array([math.cos(cube_yaw/2.0), 0.0, 0.0, math.sin(cube_yaw/2.0)])
         
-        valid_locations = [False for _ in range(len(obstacle_positions) + 1)]
+        valid_locations = [False for _ in range(len(obstacle_positions))]
         has_valid_location = False
 
         while not has_valid_location:
             x = np.random.uniform(-self.hx, self.hx)
             y = np.random.uniform(-self.hy, self.hy)
 
-            dist_to_obstacle = [np.linalg.norm((x, y))]
-            obstacle_range = [target_radius + self.size/2]
+            dist_to_obstacle = []
+            obstacle_range = []
             
             for i in range(len(obstacle_positions)):
                 dist_to_obstacle.append(np.linalg.norm((x, y) - obstacle_positions[i]))
-                if i == 0:
-                    obstacle_range.append(robot_size + self.size / 2)
+                if i ==0:
+                    obstacle_range.append(target_radius + self.size / 2 + distance_between_objects)
+                elif i == 1:
+                    obstacle_range.append(robot_size + self.size / 2 + distance_between_objects)
                 else:
-                    obstacle_range.append((self.size * 3) / 2)
+                    obstacle_range.append((self.size * 3) / 2 + distance_between_objects)
 
             nb_valid = 0
             for i in range(len(valid_locations)):
@@ -153,9 +156,11 @@ class Cube:
     
     def set_up_all_cubes(
             self,
+            target_position: tuple,
             target_radius: float,
             robot_position: np.ndarray,
             robot_size: float,
+            distance_between_objects: float,
             nb_cubes: int = 0,
     ) -> None:
         """Repositions all cubes at the start of an episode by calling
@@ -175,9 +180,9 @@ class Cube:
             nb_cubes (int): Number of cubes to reposition. Should match the
                 value passed to create_cubes(). Defaults to 0.
         """
-        positions = [robot_position]
+        positions = [target_position, robot_position]
 
         for i in range(nb_cubes):
-            cube_position = self.teleport_cube(self.cubes[i], target_radius, positions, robot_size)
+            cube_position = self.teleport_cube(self.cubes[i], target_radius, positions, robot_size, distance_between_objects)
             positions.append(cube_position)
     
