@@ -6,7 +6,7 @@ import time
 import numpy as np
 
 
-from utils.utils import (
+from coppelia.utils.utils import (
     ReplayBuffer,
     parse_arguments_from_ini,
     read_file_if_modified,
@@ -94,7 +94,7 @@ agent = SAC(
 )
 
 tot_episodes = 0
-timesteps = 0l
+timesteps = 0
 probability_training = 1.0
 save_on_episodes = args["save_on_episode"]
 running_avg_reward = 0

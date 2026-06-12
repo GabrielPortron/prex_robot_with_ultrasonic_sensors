@@ -4,7 +4,7 @@ import os
 import numpy as np
 
 
-from utils.utils import (
+from coppelia.utils.utils import (
     ReplayBuffer,
     parse_arguments_from_ini,
 )
@@ -16,7 +16,7 @@ import os.path as op
 
 
 import rclpy
-from envs.prex_ultrasonic_sensor_prex2 import PrexWorld
+from envs.prex_ultrasonic_sensor import PrexWorld
 
 rclpy.init()
 

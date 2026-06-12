@@ -3,7 +3,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float32, Float32MultiArray
 
 from gpiozero import DistanceSensor
-from temperature_sensor import TemperatureSensor
+from raspberry_pi5_scripts.ultrasonic_sensor.temperature_sensor import TemperatureSensor
 import time
 
 

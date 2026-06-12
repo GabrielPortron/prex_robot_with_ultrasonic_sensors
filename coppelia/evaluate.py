@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 
-from utils.utils import (
+from coppelia.utils.utils import (
     ReplayBuffer,
     parse_arguments_from_ini,
 )
