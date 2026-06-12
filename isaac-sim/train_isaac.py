@@ -98,6 +98,7 @@ if args_main.ppo:
         cube_dimension=args["cube_dimension"],
         arena=args_main.arena,
         arena_geometry=args["arena_geometry"],
+        sensor_config=args["sensor_config"],
         repeating_action=args["repeating_action"],
         device=device,
     )
@@ -198,6 +199,7 @@ else:
         cube_dimension=args["cube_dimension"],
         arena=args_main.arena,
         arena_geometry=args["arena_geometry"],
+        sensor_config=args["sensor_config"],
         repeating_action=args["repeating_action"],
         device=device,
     )

@@ -236,6 +236,7 @@ class PrexIsaacEnv(gym.Env):
             borderless_perimeter: list = (5.0, 5.0),
             arena_geometry: list = [(2.0, 2.0), 0.2, 0.5],
             arena: bool = False,
+            sensor_config = (180.0, 15.0, 5),
             activate_controller: bool = True,
             repeating_action: int = 1,
             device: str = "cuda",
@@ -315,6 +316,7 @@ class PrexIsaacEnv(gym.Env):
         self.cube_dimension = cube_dimension
         self.borderless_perimeter = borderless_perimeter
         self.has_arena          = arena
+        self.sensor_config = sensor_config
         self.activate_controller = activate_controller
         self.repeating_action   = repeating_action
         self.device             = device
@@ -449,9 +451,7 @@ class PrexIsaacEnv(gym.Env):
         self.robot.load()
 
         self.sensors = UltrasonicSensors(nb_sensors=self.state.nb_sensors, 
-                                         lateral_sensors_angle=180,
-                                         sensor_cone_angle=15,
-                                         sensor_nb_rays=5)
+                                         sensor_config=self.sensor_config)
 
         self.world.reset()
         self.robot.initialize()

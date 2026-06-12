@@ -12,9 +12,7 @@ class UltrasonicSensors:
             self,
             nb_sensors: int = 4,
             sensor_height: float = 0.2,
-            lateral_sensors_angle: int = 180,
-            sensor_cone_angle=15,
-            sensor_nb_rays=5
+            sensor_config:tuple = (180.0, 15.0, 5)
     ):
         """Simulates directional ultrasonic sensors using Isaac Sim PhysX
         raycasting. Rays are cast horizontally from the robot's position
@@ -59,9 +57,9 @@ class UltrasonicSensors:
         """
         self.nb_sensors    = nb_sensors
         self.sensor_height = sensor_height
-        self.lat_angle           = math.radians(lateral_sensors_angle)
-        self.cone_angle = sensor_cone_angle
-        self.nb_rays = sensor_nb_rays
+        self.lat_angle           = math.radians(sensor_config[0])
+        self.cone_angle = sensor_config[1]
+        self.nb_rays = sensor_config[2]
 
         if self.nb_sensors == 0:
             self.sensor_dirs = {}
