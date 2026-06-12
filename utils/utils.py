@@ -6,6 +6,8 @@ import torch
 import os
 import pickle
 import numpy as np
+import math
+import cv2
 
 from zmq import device
 
@@ -108,6 +110,78 @@ def seed(seed):
     np.random.seed(seed)
     random.seed(seed)
 
+def euler_to_quaternion(orientation, degrees=False, inverted=False):
+
+    roll = orientation[0]
+    pitch = orientation[1]
+    yaw = orientation[2]
+    
+    if degrees:
+        roll *= math.pi / 180
+        pitch *= math.pi / 180
+        yaw *= math.pi / 180
+    
+    qx = np.sin(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) - np.cos(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
+    qy = np.cos(roll/2) * np.sin(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.cos(pitch/2) * np.sin(yaw/2)
+    qz = np.cos(roll/2) * np.cos(pitch/2) * np.sin(yaw/2) - np.sin(roll/2) * np.sin(pitch/2) * np.cos(yaw/2)
+    qw = np.cos(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
+
+    if inverted:
+        return qw, qx, qy, qz
+    else:
+        return qx, qy, qz, qw
+
+def quaternion_to_euler(orientation, degrees=False, inverted=False):
+
+    if inverted:
+        qw = orientation[0]
+        qx = orientation[1]
+        qy = orientation[2]
+        qz = orientation[3]
+    else:
+        qx = orientation[0]
+        qy = orientation[1]
+        qz = orientation[2]
+        qw = orientation[3]
+
+    t0 = +2.0 * (qw * qx + qy * qz)
+    t1 = +1.0 - 2.0 * (qx * qx + qy * qy)
+    roll = math.atan2(t0, t1)
+    
+    t2 = +2.0 * (qw * qy - qz * qx)
+    t2 = +1.0 if t2 > +1.0 else t2
+    t2 = -1.0 if t2 < -1.0 else t2
+    pitch = math.asin(t2)
+    
+    t3 = +2.0 * (qw * qz + qx * qy)
+    t4 = +1.0 - 2.0 * (qy * qy + qz * qz)
+    yaw = math.atan2(t3, t4)
+    
+    if degrees:
+        roll *= 180 / math.pi
+        pitch *= 180 / math.pi
+        yaw *= 180 / math.pi
+
+    return roll, pitch, yaw
+
+def create_video(video_path, images_path, fps):
+
+    video = cv2.VideoWriter(
+        filename=video_path,
+        fourcc=cv2.VideoWriter_fourcc(*'DIVX'),
+        fps=fps,
+        frameSize=(1024, 1024)
+    )
+
+    images = [img for img in os.listdir(images_path)]
+    images.sort()
+    
+    for image in images:
+        video.write(cv2.imread(os.path.join(images_path, image)))
+        video.write(cv2.imread(os.path.join(images_path, image)))
+
+    video.release()
+    print("Video succesfully generated !")
 
 # Code based on:
 # https://github.com/openai/baselines/blob/master/baselines/deepq/self.py
