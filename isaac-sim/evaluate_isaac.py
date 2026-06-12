@@ -25,8 +25,8 @@ from envs.prex_isaac_env import PrexIsaacEnv
 
 # --- 1 - Initializations -------------------------------------------------
 parser = argparse.ArgumentParser()
-parser.add_argument("--cube", action="store_true",
-                    help="Spawns a cube for the training")
+parser.add_argument("--cube", type=int, required=True,
+                    help="Enter the number of cube you want to spawn for the training")
 parser.add_argument("--ppo", action="store_true",
                     help="Change the algorithm from SAC to PPO")
 parser.add_argument("--arena", action="store_true",
@@ -82,14 +82,15 @@ if args_main.ppo:
 
     from isaacsim.sensors.camera import Camera
 
+    camera_orientation = [-180.0, -90.0, 0.0]
     camera = Camera(
         prim_path="/World/camera",
-        position=np.array([0.0, 0.0, 5.0]),
-        orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
+        position=np.array([0.0, 0.0, 8.0]),
+        orientation=euler_to_quaternion(camera_orientation, degrees=True),
         frequency=15,
         resolution=(1024, 1024)
     )
-
+    
     camera.initialize()
     camera.add_motion_vectors_to_frame()
 
@@ -188,10 +189,11 @@ else:
 
     from isaacsim.sensors.camera import Camera
 
+    camera_orientation = [-180.0, -90.0, 0.0]
     camera = Camera(
         prim_path="/World/camera",
-        position=np.array([0.0, 0.0, 5.0]),
-        orientation=euler_to_quaternion(-180.0, -90.0, 0.0, degrees=True),
+        position=np.array([0.0, 0.0, 12.0]),
+        orientation=euler_to_quaternion(camera_orientation, degrees=True),
         frequency=15,
         resolution=(1024, 1024)
     )
@@ -295,8 +297,7 @@ else:
             timesteps += 1
 
 # --- 7 - Create video -------------------------------------------------------------
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-video_name = "episode_" + timestamp + ".mp4"
+video_name = "episode_" + args_main.model + ".mp4"
 video_path = os.path.join(output_path, video_name)
 create_video(video_path, images_path, fps=15)
 
