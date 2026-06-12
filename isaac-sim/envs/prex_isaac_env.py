@@ -14,7 +14,7 @@ class State:
             linear_speed: dict,
             angular_speed: dict,
             heading_vec: tuple,
-            controller: int
+            controller: bool
     ):
         """Flexible state container that builds a Gymnasium observation space
         dynamically from a declarative configuration. Each field is a dict
@@ -46,7 +46,7 @@ class State:
                 vector components (cos_yaw, sin_yaw, delta) as a 3-tuple, or
                 None to exclude the heading vector entirely.
                 Example: (1.0, 1.0, 100.0)
-            controller (int | None): Maximum absolute value for the controller
+            controller (bool | None): Maximum absolute value for the controller
                 flag dimension, or None to exclude it from the state vector.
                 When not None, a single dimension is appended at the end of the
                 state vector encoding whether the obstacle avoidance controller
@@ -149,7 +149,7 @@ class State:
         )
         self.state = np.zeros(self.state_length, dtype=np.float32)
 
-    def update_state(self,
+    def update_values(self,
                     sensors: np.ndarray,
                     position: np.ndarray,
                     orientation: float | np.ndarray,
@@ -183,16 +183,13 @@ class State:
                 avoidance controller was active on this step, shape (1,).
                 Value is 1 if the controller overrode the action, 0 otherwise.
         """
-        new_state = np.concatenate([sensors,
-                                    position,
-                                    orientation,
-                                    linear_speed,
-                                    angular_speed,
-                                    heading_vec,
-                                    controller])
-        for i, value in enumerate(new_state):
-            self.state[i] = value
-        self.state = np.round(self.state, 5)
+        self.sensors = np.round(sensors, 5)
+        self.position = np.round(position, 5)
+        self.orientation = np.round(orientation, 5)
+        self.linear_speed = np.round(linear_speed, 5)
+        self.angular_speed = np.round(angular_speed, 5)
+        self.heading_vec = np.round(heading_vec, 5)
+        self.controller = controller
 
     def get_values(self) -> np.ndarray:
         """Returns the current state vector.
@@ -201,6 +198,16 @@ class State:
             np.ndarray: 1D array of shape (state_length,) and dtype float32
                 containing the most recent values set by update_state().
         """
+        new_state = np.concatenate([self.sensors,
+                                    self.position,
+                                    self.orientation,
+                                    self.linear_speed,
+                                    self.angular_speed,
+                                    self.heading_vec,
+                                    self.controller])
+        
+        for i, value in enumerate(new_state):
+            self.state[i] = value
         return self.state
 
     def get_observation_space(self) -> Box:
@@ -360,8 +367,6 @@ class PrexIsaacEnv(gym.Env):
         self.heading_vec     = np.zeros(2,  dtype=np.float32)
         self.last_action     = np.zeros(2,  dtype=np.float32)
         self.last_position   = np.zeros(3,  dtype=np.float32)
-        self.same_position   = 0
-        self.no_movement     = 0
 
         if self.has_arena:
             self.perimeter       = arena_geometry[0]
@@ -522,8 +527,6 @@ class PrexIsaacEnv(gym.Env):
             robot_size=0.4,
         )
 
-        self.same_position = 0
-
         return self.state.get_values().copy(), self.info
 
     def step(self, action: np.ndarray, render: bool = False):
@@ -580,16 +583,6 @@ class PrexIsaacEnv(gym.Env):
         self.read_state()
         reward, terminated, truncated = self.update_reward(action)
         self.timestep += 1
-
-        if abs(self.linear_speed) < 0.05:
-            self.no_movement += 1
-        else:
-            self.no_movement = 0
-
-        # if np.linalg.norm(self.last_position - self.position) < 1e-4 and self.action[1] < 0.1:
-        #     self.same_position += 1
-        # else:
-        #     self.same_position = 0
 
         if self.verbose:
             print(f"[step {self.step_counter}] v={linear_vel:.3f} "
@@ -654,16 +647,14 @@ class PrexIsaacEnv(gym.Env):
             self.delta = 0.0
 
         full_sensors = self.sensors.get_distances(self.position, self.theta)
-        front = np.array([full_sensors[0]])
-        front_and_back = full_sensors[:2]
 
-        self.state.update_state(sensors=full_sensors,
+        self.state.update_values(sensors=full_sensors,
                                 position=self.position,
                                 orientation=np.array([self.theta]),
                                 linear_speed=np.array([self.linear_speed]),
                                 angular_speed=np.array([self.angular_speed]),
                                 heading_vec=np.concatenate([self.heading_vec, [self.delta]]),
-                                controller=np.array([int(self.needed_control)]))
+                                controller=np.array([self.needed_control]))
 
     def update_reward(
             self,
@@ -719,7 +710,7 @@ class PrexIsaacEnv(gym.Env):
             dist_term = 1 / (self.dist + 0.1)
             reward = (speed_term * delta_term * dist_term) / 1000 - int(self.needed_control)
 
-        dist = self.state.get_values()[0] 
+        dist = self.state.sensors[0] 
         if dist > 0.30:
             reward += 0.5
 
