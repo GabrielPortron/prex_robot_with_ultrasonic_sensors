@@ -49,7 +49,7 @@ The observation is a 14-dimensional vector assembled in this order:
 
 | Index | Component | Bounds | Description |
 |---|---|---|---|
-| 0–3 | `d_front, d_back, d_left, d_right` | ±6.0 m | Ultrasonic sensor distances |
+| 0–3 | `d_front, d_back, d_left, d_right` |0.3 to 6.0 m | Ultrasonic sensor distances |
 | 4–6 | `x, y, z` | ±inf | Robot world-frame position |
 | 7 | `yaw` | ±π rad | Robot heading |
 | 8 | `vx` | ±0.5 m/s | Forward linear speed |
@@ -156,11 +156,11 @@ Each component can be enabled by setting its bound value (refer to the table in 
 state.update_values(
     sensors=sensors,
     position=position,
-    orientation=np.array([yaw]),
-    linear_speed=np.array([linear_speed]),
-    angular_speed=np.array([angular_speed]),
-    heading_vec=np.concatenate([heading_vec, [delta]]),
-    controller=np.array([needed_control])
+    orientation=yaw,
+    linear_speed=linear_speed,
+    angular_speed=angular_speed,
+    heading_vec=[heading_vec, [delta]],
+    controller=needed_control
 )
 ```
 
@@ -261,13 +261,13 @@ uv run evaluate_isaac.py --nb_episodes 10 --cube 1 --model <run_name> --weight 0
 ## Project Structure
 
 ```
+algorithms/
+├── sac.py                        # Custom SAC implementation
+├── model.py                      # Policy and Q-value networks
+├── callbacks/
+│   ├── wandb_callback.py         # W&B logging callback for PPO
+│   └── video_callback.py         # Episode recording callback for PPO             
 isaac-sim/
-├── algorithms/
-│   ├── sac.py                        # Custom SAC implementation
-│   ├── model.py                      # Policy and Q-value networks (PyTorch)
-│   └── callbacks/
-│       ├── wandb_callback.py         # W&B logging callback for PPO
-│       └── video_callback.py         # Episode recording callback for PPO
 ├── envs/
 │   ├── prex_isaac_env.py             # Main Gymnasium environment + State class
 │   └── isaacsim_elements/
@@ -282,7 +282,23 @@ isaac-sim/
 ├── train_isaac.py                    # Training entry point (SAC or PPO)
 ├── evaluate_isaac.py                 # Evaluation and video recording entry point
 ├── config.ini                        # All hyperparameters and run settings
-└── requirements.txt                  # Python dependencies
+coppelia/
+├── envs/
+│   ├── prex_ultrasonic_sensor.py        
+├── prex/
+│   ├── create_csv_file.py
+│   ├── read_csv_file.py
+│   ├── take_measures_4sensors.py
+│   ├── take_measures_online.py
+│   ├── temp_err.py
+├── raspberry_pi5_scripts/
+├── scene_coppelia/
+├── utils/
+│   └── utils.py
+├── train.py                    
+├── evaluate.py                 
+├── config.ini                        
+└── evaluate.py  
 ```
 
 ---
