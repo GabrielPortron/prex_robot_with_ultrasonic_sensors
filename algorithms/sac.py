@@ -218,5 +218,10 @@ class SAC:
         self.policy_network.load_state_dict(torch.load(filepath))
         print(f"...model {filepath} loaded.")
 
+    def load_weights_isaac(self, model_path):
+        print("loading model...")
+        self.policy_network.load_state_dict(torch.load(model_path))
+        print(f"...model {model_path} loaded.")
+
     def set_to_eval_mode(self):
         self.policy_network.eval()

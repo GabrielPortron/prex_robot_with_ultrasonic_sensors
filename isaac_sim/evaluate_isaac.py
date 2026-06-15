@@ -42,12 +42,12 @@ args_main = parser.parse_args()
 
 RUN_NAME = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-file_config_path = "config.ini" #when debug, add isaac-sim/ at the beginning of the path
+file_config_path = "config.ini" #when debug, add isaac_sim/ at the beginning of the path
 args = parse_arguments_from_ini(file_config_path)
 
 device = "cuda"
 
-model_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/models/" + args_main.model + f"/prex_ultrasonic_robot_policy_{args_main.weight}_weights.pth"
+model_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac_sim/models/" + args_main.model + f"/prex_ultrasonic_robot_policy_{args_main.weight}_weights.pth"
 
 
 ### --- PPO --- ###
@@ -101,10 +101,10 @@ if args_main.ppo:
 
     print("[Playing] ... camera set up")
 
-    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
+    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac_sim/records"
     os.makedirs(output_path, exist_ok=True)
 
-    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
+    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac_sim/records/images/"
     os.makedirs(images_path, exist_ok=True)
 
     # --- 4 - Wrap environment ----------------------------------------------
@@ -212,10 +212,10 @@ else:
 
     print("[Playing] ... camera set up")
 
-    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records"
+    output_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac_sim/records"
     os.makedirs(output_path, exist_ok=True)
 
-    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac-sim/records/images/"
+    images_path = "/home/g.portron/gitRepos/prex_robot_with_ultrasonic_sensors/isaac_sim/records/images/"
     os.makedirs(images_path, exist_ok=True)
 
     # --- 4 - Creating replay buffer ------------------------------------------
@@ -257,7 +257,7 @@ else:
 
     print("[Playing] ... Agent created")
 
-    agent.load_weights(model_path)
+    agent.load_weights_isaac(model_path)
     agent.set_to_eval_mode()
 
     # --- 6 - Playing -------------------------------------------------------------
