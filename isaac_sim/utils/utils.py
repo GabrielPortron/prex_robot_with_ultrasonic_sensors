@@ -419,33 +419,31 @@ def read_file_if_modified(args, file_path, last_mod_time):
     return last_mod_time, args, False
 
 
+import ast
+
 def parse_arguments_from_ini(file_path):
     config = configparser.ConfigParser()
     config.read_file(open(file_path))
 
     arguments = {}
 
-    for section, cfg in config.items():
+    for section in config.sections():
         for key, value in config[section].items():
-            print("Parsing the key: ", key)
-            if value.lower() in ["none", "null"]:
-                value = None
-            elif value.lower() == "true":
-                value = True
-            elif value.lower() == "false":
-                value = False
-            # elif "/" in value:
-            #     pass
-            elif "." in value:
-                value = float(value)
-            elif "'" in value or '"' in value:
-                value = value[1:-1]
-            else:
+            # Strip inline comments (e.g. "= (180.0, 15.0, 5) #lateral_sensors_angle / ...")
+            value = value.split("#")[0].strip()
+
+            try:
+                # Handles: booleans, ints, floats, tuples, lists, nested structures
+                value = ast.literal_eval(value)
+            except ValueError:
+                # ast.literal_eval raises ValueError for expressions like "1.0/60".
+                # eval() is used as a targeted fallback with no builtins for safety.
                 try:
-                    value = int(value)
-                except:
-                    # is a string
-                    pass
+                    value = eval(value, {"__builtins__": {}})
+                except Exception:
+                    pass  # Keep as a plain string
+            except Exception:
+                pass  # Keep as a plain string
 
             arguments[key] = value
 
