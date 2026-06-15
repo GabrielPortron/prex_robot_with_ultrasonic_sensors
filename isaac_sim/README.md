@@ -159,7 +159,7 @@ state.update_values(
     orientation=yaw,
     linear_speed=linear_speed,
     angular_speed=angular_speed,
-    heading_vec=[heading_vec, [delta]],
+    heading_vec=heading_vector,
     controller=needed_control
 )
 ```

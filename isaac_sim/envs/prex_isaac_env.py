@@ -154,44 +154,56 @@ class State:
         self.state = np.zeros(self.state_length, dtype=np.float32)
 
     def update_values(self,
-                      sensors: np.ndarray,
-                      position: np.ndarray,
-                      orientation: float | np.ndarray,
-                      linear_speed: float | np.ndarray,
-                      angular_speed: float | np.ndarray,
-                      heading_vec: np.ndarray,
-                      controller: np.ndarray
-                      ) -> None:
+                    sensors,
+                    position,
+                    orientation,
+                    linear_speed,
+                    angular_speed,
+                    heading_vec,
+                    controller
+                    ) -> None:
         """Stores the individual state components as rounded attributes.
         The flat state vector is assembled lazily by get_values() when
         needed, rather than eagerly here.
 
+        All inputs are converted to 1D float32 numpy arrays automatically,
+        so scalars, lists, tuples, and arrays of any shape are all accepted.
         Rounding to 5 decimal places on each component reduces accumulated
         floating-point noise without affecting training dynamics.
 
         Args:
-            sensors (np.ndarray): Sensor distance readings, shape (n_sensors,).
-            position (np.ndarray): Robot world-frame position [x, y, z],
-                shape (3,).
-            orientation (float | np.ndarray): Yaw angle in radians wrapped
-                as a 1-element array, shape (1,).
-            linear_speed (float | np.ndarray): Forward speed in m/s wrapped
-                as a 1-element array, shape (1,).
-            angular_speed (float | np.ndarray): Yaw rate in rad/s wrapped
-                as a 1-element array, shape (1,).
-            heading_vec (np.ndarray): Concatenated heading vector and angular
-                error [cos_yaw, sin_yaw, delta], shape (3,).
-            controller (np.ndarray): Binary flag indicating whether the
-                obstacle avoidance controller was active on this step,
-                shape (1,). Value is 1 if active, 0 otherwise.
+            sensors: Sensor distance readings. Accepts any array-like of
+                shape (n_sensors,) or a scalar if nb_sensors == 1.
+            position: Robot world-frame position [x, y, z]. Accepts any
+                array-like of length 3 or a scalar.
+            orientation: Yaw angle in radians. Accepts a scalar float, a
+                1-element list, or a 1D array.
+            linear_speed: Forward speed in m/s. Accepts a scalar float,
+                a 1-element list, or a 1D array.
+            angular_speed: Yaw rate in rad/s. Accepts a scalar float,
+                a 1-element list, or a 1D array.
+            heading_vec: Heading vector and angular error
+                [cos_yaw, sin_yaw, delta]. Accepts any array-like of
+                length 3.
+            controller: Binary flag indicating whether the obstacle
+                avoidance controller was active on this step. Accepts a
+                scalar int or bool, a 1-element list, or a 1D array.
+                Value is 1 if active, 0 otherwise.
         """
-        self.sensors = np.round(sensors, 5)
-        self.position = np.round(position, 5)
-        self.orientation = np.round(orientation, 5)
-        self.linear_speed = np.round(linear_speed, 5)
-        self.angular_speed = np.round(angular_speed, 5)
-        self.heading_vec = np.round(heading_vec, 5)
-        self.controller = controller
+        def _to_array(x):
+            """Converts any scalar or array-like to a flat float32 array."""
+            return np.round(
+                np.atleast_1d(np.array(x, dtype=np.float32)).flatten(),
+                5
+            )
+
+        self.sensors      = _to_array(sensors)
+        self.position     = _to_array(position)
+        self.orientation  = _to_array(orientation)
+        self.linear_speed = _to_array(linear_speed)
+        self.angular_speed = _to_array(angular_speed)
+        self.heading_vec  = _to_array(heading_vec)
+        self.controller   = _to_array(controller)
 
     def get_values(self) -> np.ndarray:
         """Assembles and returns the flat state vector by concatenating all
@@ -710,15 +722,16 @@ class PrexIsaacEnv(gym.Env):
         else:
             self.delta = 0.0
 
+        full_heading = np.concatenate([self.heading_vec, [self.delta]])
         full_sensors = self.sensors.get_distances(self.position, self.theta)
 
         self.state.update_values(sensors=full_sensors,
                                 position=self.position,
-                                orientation=np.array([self.theta]),
-                                linear_speed=np.array([self.linear_speed]),
-                                angular_speed=np.array([self.angular_speed]),
-                                heading_vec=np.concatenate([self.heading_vec, [self.delta]]),
-                                controller=np.array([self.needed_control]))
+                                orientation=self.theta,
+                                linear_speed=self.linear_speed,
+                                angular_speed=self.angular_speed,
+                                heading_vec=full_heading,
+                                controller=self.needed_control)
 
     def update_reward(
             self,
