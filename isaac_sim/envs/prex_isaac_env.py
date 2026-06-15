@@ -154,13 +154,13 @@ class State:
         self.state = np.zeros(self.state_length, dtype=np.float32)
 
     def update_values(self,
-                    sensors,
-                    position,
-                    orientation,
-                    linear_speed,
-                    angular_speed,
-                    heading_vec,
-                    controller
+                    sensors=None,
+                    position=None,
+                    orientation=None,
+                    linear_speed=None,
+                    angular_speed=None,
+                    heading_vec=None,
+                    controller=None
                     ) -> None:
         """Stores the individual state components as rounded attributes.
         The flat state vector is assembled lazily by get_values() when
@@ -192,6 +192,8 @@ class State:
         """
         def _to_array(x):
             """Converts any scalar or array-like to a flat float32 array."""
+            if x is None:
+                return np.array([], dtype=np.float32)
             return np.round(
                 np.atleast_1d(np.array(x, dtype=np.float32)).flatten(),
                 5
@@ -644,7 +646,7 @@ class PrexIsaacEnv(gym.Env):
         self.robot.apply_action(command=[linear_vel, angular_vel])
 
         if render:
-            self.sensors.draw_rays(origin=self.position, yaw=self.theta, cone_angle=15.0, n_rays=5)
+            self.sensors.draw_rays(origin=self.position, yaw=self.theta)
 
         for _ in range(max(1, self.repeating_action)):
             self.world.step(render=render)
@@ -731,7 +733,8 @@ class PrexIsaacEnv(gym.Env):
                                 linear_speed=self.linear_speed,
                                 angular_speed=self.angular_speed,
                                 heading_vec=full_heading,
-                                controller=self.needed_control)
+                                controller=self.needed_control
+                                )
 
     def update_reward(
             self,
